@@ -49,6 +49,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/scripts/bundle-webviews.js` | **1 línea**: entry point `sqlworks` | Anclaje que el brief no previó (§11.1). Es un router, así que se queda en una línea para siempre | M2 |
 | `extensions/mssql/tsconfig.extension.json` | **1 línea**: excluye `src/custom/webviews` | Mismo reparto que el upstream hace con `src/webviews` | M2 |
 | `extensions/mssql/tsconfig.webviews.json` | **2 líneas**: incluye `src/custom/webviews` y `src/custom/sharedInterfaces` | Ídem | M2 |
+| `extensions/mssql/tsconfig.webviews.json` | **M3, 1 línea**: incluye además `src/custom/admin/sql/types.ts` | Los tipos del dominio los fija el §9 del brief en esa ruta y el panel los pinta tal cual. No importan nada, así que compilan en los dos lados sin duplicarlos | M3 |
 
 ### Archivos de test y de arnés e2e que el renombrado obligó a tocar
 
@@ -72,6 +73,9 @@ el nuestro.
 
 En los archivos de test el cambio es además a prueba de futuro: pasan a leer el identificador de
 la constante, así que un renombrado posterior no los vuelve a romper.
+
+**M3 no añadió ni una línea de producto al upstream**: solo una línea de configuración de build
+(`tsconfig.webviews.json`). Todo lo demás vive en `src/custom/`.
 
 ### Archivos nuevos, que no generan conflicto
 
@@ -938,7 +942,12 @@ extensions/mssql/src/custom/
   admin/
     panels/                 controladores del host
       adminPanelController.ts
-    sql/                    (M3) todo el T-SQL, y solo aquí
+    serverSecurityService.ts  (M3) una lectura por sección, con su propio error
+    sql/                    todo el T-SQL, y solo aquí
+      types.ts              (M3) tipos del dominio, sin imports
+      rows.ts               (M3) acceso por nombre de columna a SimpleExecuteResult
+      execute.ts            (M3) query/simpleexecute, con run() y tryRun()
+      queries/              (M3) una consulta + su mapeador por archivo
   util/
     connectionTarget.ts     resuelve un nodo del árbol → servidor y base
   overrides/                modificaciones a lo existente
@@ -946,7 +955,10 @@ extensions/mssql/src/custom/
   webviews/                 TODO el React del fork (solo en tsconfig.webviews)
     index.tsx               router de vistas
     strings.ts              textos de los webviews
-    common/panelShell.tsx   estructura común de paneles (§14 del brief)
+    common/
+      panelShell.tsx        estructura común de paneles (§14 del brief)
+      propertyList.tsx      (M3) bloques de propiedades etiqueta/valor
+      dataTable.tsx         (M3) rejilla de solo lectura sobre DataGrid
     AdminPanel/
   snippets/                 (M7)
   format/                   (M8)
@@ -1202,3 +1214,187 @@ Lo que **sigue en pie**:
   ejecuta a su manera y no lo controlamos.
 - Las confirmaciones escribiendo el nombre del objeto (§11.5) y el aviso de producción (§11.4).
 - Mostrar el script antes de ejecutar, venga del API o de nosotros.
+
+---
+
+## 19. Seguridad del servidor en solo lectura (M3)
+
+El hito pide leer y mostrar logins, roles de servidor, permisos de servidor, propiedades de la
+instancia y sesiones activas. **Ni una sentencia que modifique nada**: las siete consultas son
+`SELECT`.
+
+### 19.1. Cuatro capas, y la frontera entre ellas
+
+```
+queries/<tema>.ts        SQL literal (constante)  +  mapeador puro
+rows.ts                  SimpleExecuteResult → acceso por nombre de columna
+execute.ts               query/simpleexecute sobre la conexión ya abierta
+serverSecurityService.ts una lectura por sección, cada una con su propio error
+webviews/AdminPanel/     una vista por sección, sin lógica de datos
+```
+
+El corte importante está entre las dos primeras: **el mapeador es una función pura** que recibe un
+`SimpleExecuteResult` y devuelve tipos del dominio. Por eso los 28 tests de M3 no necesitan
+servidor ni mocks del STS, solo literales de filas. El §10 del brief pedía exactamente esto.
+
+Las siete consultas:
+
+| Constante                 | Archivo                         | Vistas del sistema                                                | Permiso                             |
+| ------------------------- | ------------------------------- | ----------------------------------------------------------------- | ----------------------------------- |
+| `LOGINS_SQL`              | `queries/logins.ts`             | `sys.server_principals`, `sys.sql_logins`                         | ninguno especial                    |
+| `SERVER_ROLES_SQL`        | `queries/serverRoles.ts`        | `sys.server_principals` (autojoin por propietario)                | ninguno especial                    |
+| `SERVER_ROLE_MEMBERS_SQL` | `queries/serverRoles.ts`        | `sys.server_role_members`                                         | ninguno especial                    |
+| `SERVER_PERMISSIONS_SQL`  | `queries/serverPermissions.ts`  | `sys.server_permissions`, `sys.endpoints`                         | ninguno especial                    |
+| `INSTANCE_PROPERTIES_SQL` | `queries/instanceProperties.ts` | `SERVERPROPERTY(...)`, `sys.configurations`                       | ninguno especial                    |
+| `INSTANCE_RUNTIME_SQL`    | `queries/instanceProperties.ts` | `sys.dm_os_sys_info`                                              | **`VIEW SERVER STATE`**             |
+| `ACTIVE_SESSIONS_SQL`     | `queries/sessions.ts`           | `sys.dm_exec_sessions`, `dm_exec_connections`, `dm_exec_sql_text` | **`VIEW SERVER STATE`** (ver §19.5) |
+
+`SERVER_ROLE_MEMBERS_SQL` se usa dos veces, con dos mapeadores distintos: `mapServerRoleMembership`
+la invierte a «miembro → roles» para la columna de roles de la rejilla de logins, y `mapMembersByRole`
+la deja como «rol → miembros» para la de roles. Una consulta, dos lecturas, cero duplicación de SQL.
+
+### 19.2. Cero interpolación: por qué `identifiers.ts` aún no aparece
+
+Las siete constantes son **texto literal sin una sola sustitución**. Nada que venga del usuario, del
+árbol de objetos ni del perfil de conexión entra en el SQL de M3. Se audita así:
+
+```bash
+git grep -n '\${' -- extensions/mssql/src/custom/admin/sql/queries
+```
+
+La única coincidencia está en un texto que se muestra (`Desconocida (${engineEdition})`), no en una
+consulta.
+
+Por eso `src/custom/util/identifiers.ts` y su validación (regla 11.2 del brief) **todavía no
+existen**: no hay ningún identificador que validar. La primera consulta que reciba un nombre
+—`USE [<base>]` en M4— es la que lo estrena, y entonces se escriben la función y sus tests de
+corchete de cierre, comilla simple, punto y coma y doble guión. Adelantarlo ahora sería código sin
+uso, y el brief prohíbe refactorizar más allá del hito en curso (§16.7).
+
+### 19.3. Acceso por nombre de columna, no por índice
+
+`SimpleExecuteResult` devuelve `rows: DbCellValue[][]`, es decir índices. Un mapeador escrito contra
+índices se rompe en silencio en cuanto alguien añade una columna a la mitad de la consulta y todos
+los valores se corren un puesto.
+
+`rows.ts` construye un índice `nombre → posición` a partir de `columnInfo` y expone
+`text`, `optionalText`, `number` y `boolean`. Dos detalles:
+
+- **El índice va en minúsculas.** Los nombres de columna de T-SQL no distinguen mayúsculas, y el
+  mapeador no tiene por qué recordar si la consulta escribió `is_disabled` o `Is_Disabled`.
+- **Pedir una columna que no existe lanza, y el mensaje la nombra.** Si el fallo fuese silencioso
+  (`undefined` → `""`), una columna mal escrita saldría como una celda vacía en producción en lugar
+  de reventar el test.
+
+`NULL` se convierte a `""` en `text()` y a `undefined` en `optionalText()`: el panel distingue «el
+login no tiene base por defecto» de «el login tiene una base llamada cadena vacía».
+
+### 19.4. Lo que cambió al correr las consultas contra un servidor de verdad
+
+Las siete se ejecutaron contra la instancia SQL Server 2022 del §13.1 antes de dar el hito por
+bueno. Tres errores que ningún test unitario habría encontrado:
+
+1. **Roles internos en la rejilla.** `sys.server_principals` devuelve los roles `##MS_...##` que SQL
+   Server crea para firmar procedimientos del sistema. SSMS no los muestra. Añadido
+   `AND r.name NOT LIKE '##%'`, y el test e2e comprueba que no aparece ninguno.
+2. **Un entero mostrado como zona horaria.** Había mapeado `sys.dm_os_sys_info.time_source` a un
+   campo `timeZone`; es un entero (`0` = `QueryPerformanceCounter`), no una zona horaria. Se quitó
+   de la consulta, del tipo y del mapeador: mejor no mostrar el dato que mostrarlo mal.
+3. **Sentencias con salto de línea y sangría al principio.** `sys.dm_exec_sql_text` devuelve el
+   texto tal cual lo mandó el cliente, así que la columna de última sentencia empezaba en blanco.
+   `.trim()` en el mapeador, con su test.
+4. **Cuatro filas «public · CONNECT · Concedido» idénticas.** `public` tiene `CONNECT` concedido
+   sobre los cuatro puntos de conexión de fábrica (`TSQL Default TCP`, `Default VIA`,
+   `Local Machine`, `Named Pipes`), y la consulta no traía el objeto sobre el que cae el permiso:
+   se veían cuatro filas repetidas sin explicación, y la clave de fila
+   (`principal::permiso::estado`) se repetía. Ahora la consulta resuelve el objeto según la clase
+   (100 `SERVER`, 101 `SERVER_PRINCIPAL` para `IMPERSONATE`, 105 `ENDPOINT`), el panel lo muestra
+   en su propia columna y la clave de fila lo incluye.
+
+### 19.5. Degradación parcial, nunca el panel en blanco
+
+Cada sección se lee por separado y guarda su propio error, y dentro de una sección los datos
+opcionales se piden con `tryRun`. Un login sin `VIEW SERVER STATE` ve logins, roles y permisos
+completos, y pierde solo lo que ese permiso protege.
+
+El caso que obliga a un aviso propio: **cuando falta `VIEW SERVER STATE`, la consulta de sesiones no
+da error**. El motor devuelve solo la sesión del propio usuario. Sin explicarlo, el panel diría que
+el servidor no tiene a nadie conectado. `looksLikeMissingViewServerState()` detecta la forma de ese
+caso —una sola fila, y es la nuestra— y la vista muestra un `MessageBar` de aviso.
+
+Lo mismo con la pertenencia a roles en la rejilla de logins: si esa segunda consulta falla, los
+logins se muestran igual, con la columna de roles vacía.
+
+### 19.6. Carga perezosa, por sección
+
+Abrir el panel ejecuta **cero consultas**. Cada pestaña se lee al abrirla, la primera vez; volver a
+una ya leída no vuelve a consultar; «Actualizar» recarga **solo la sección visible**. La razón es la
+del §11 del brief: esto apunta a servidores de producción, y abrir una pestaña no debe disparar
+cinco consultas contra uno.
+
+El estado por sección es `idle → loading → loaded | error`, con `readAt` en el caso `loaded`. La
+cabecera muestra ese sello de la sección activa, así que se ve **de cuándo son los datos** en
+pantalla en lugar de suponer que son de ahora.
+
+`loadSection` comprueba `this.isDisposed` después del `await`: cerrar el panel mientras una consulta
+está en vuelo no debe escribir en un estado que ya no existe.
+
+### 19.7. Interfaz: dos densidades, y el porqué
+
+El §14 del brief fija filas de 44 px. Se aplica en `dataTable.tsx`, que es donde van **filas de
+datos**: seleccionables y con acciones a partir de M5. El bloque de propiedades de la instancia no
+son filas de datos sino pares etiqueta/valor, y a 44 px la ficha quedaba desparramada; va a 32 px en
+`propertyList.tsx`, con tarjeta con borde, cabeceras de sección y separadores de 1 px. La desviación
+está anotada en el propio archivo.
+
+`dataTable.tsx` es un envoltorio del `DataGrid` de Fluent, el mismo componente que el upstream usa
+para tablas que no son resultados de consulta. No se usa `FluentSlickGrid`: ese es para la rejilla de
+resultados, con virtualización, y pesa más de lo que estas listas necesitan.
+
+Tres decisiones que salieron de mirar el panel funcionando, midiéndolo en el navegador:
+
+- **Anchos por columna.** `DataGrid` reparte el ancho a partes iguales, así que
+  `NT AUTHORITY\NETWORK SERVICE` salía recortado mientras la columna de un `1` sobraba espacio. Cada
+  vista pasa su `columnSizing` con mínimo y ancho por defecto, y la rejilla queda redimensionable.
+- **El borde va fuera del elemento que desplaza.** `DataGrid` reparte los anchos según la caja de su
+  contenedor, borde incluido, así que con el borde en el mismo `div` que hace scroll la tabla salía
+  2 px más ancha que el hueco (1240 contra 1238, medido) y aparecía una barra de desplazamiento
+  horizontal aunque todo cupiera. Tarjeta fuera, desplazamiento dentro: las rejillas que caben ya no
+  la muestran, y la de sesiones —diez columnas, 1480 px— sí, que es lo correcto.
+- **Buscador sin acentos.** Filtra en minúsculas y sin diacríticos, así que «administracion»
+  encuentra «Administración».
+
+Marcas visuales del §14: `sysadmin` y `securityadmin` llevan insignia de peligro, `DENY` sale en
+color de peligro frente al verde de `GRANT`, y la sesión propia va marcada «Esta sesión».
+
+### 19.8. Verificación de M3
+
+| Comprobación                       | Resultado                                                            |
+| ---------------------------------- | -------------------------------------------------------------------- |
+| `npm run build -- --target mssql`  | ✅                                                                   |
+| `npm run lint -- --target mssql`   | ✅                                                                   |
+| `npm test -- --target mssql`       | ✅ **5148 pasan, 0 fallan** (4943 + 205 de `sql-database-projects`)  |
+| Tests propios de M3                | ✅ 29 de los mapeadores, sin servidor ni mocks del STS               |
+| Las siete consultas                | ✅ ejecutadas contra SQL Server 2022 real (§19.4)                    |
+| Las cinco secciones en la interfaz | ✅ `test/e2e/sqlworksAdminPanel.spec.ts`, un recorrido por las cinco |
+
+Lo que comprueba el e2e con datos reales sembrados en §13.1, no con dobles:
+
+- **Logins**: `parity_user` existe, sale como «Login SQL» y con el rol `dbcreator`; `sa` existe;
+  `BUILTIN\Administrators` sale como «Grupo de Windows».
+- **Roles de servidor**: `sysadmin` y `public` presentes, y **cero** filas `##MS_`.
+- **Permisos**: `CONNECT SQL` con estado «Concedido», y el objeto resuelto
+  («Punto de conexión: TSQL …»).
+- **Instancia**: `SQL_Latin1_General_CP1_CI_AS`, `Developer Edition (64-bit)`, autenticación en
+  «modo mixto».
+- **Sesiones**: la sesión propia marcada «Esta sesión», sobre `ParityDb`.
+- **Buscador**: filtrando por `parity` queda `parity_user` y desaparece `sa`.
+
+### 19.9. Lo que M3 deliberadamente no hace
+
+- **No escribe.** No hay DDL, ni edición, ni `objectManagement/save`. Eso es M5, con vista previa
+  del script, confirmación y transacción explícita.
+- **No baja a la base de datos.** Usuarios, roles de base, esquemas y la matriz de permisos son M4.
+- **No resuelve permisos heredados.** La duda del §18.4 —si `effectivePermissions` resuelve la
+  herencia por rol— sigue abierta y se comprueba en M4. M3 muestra solo permisos **explícitos** de
+  servidor, que es lo que devuelve `sys.server_permissions`, y la leyenda de la rejilla lo dice.

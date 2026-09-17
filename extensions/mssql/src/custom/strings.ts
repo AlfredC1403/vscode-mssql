@@ -34,5 +34,7 @@ export const Strings = {
         /** Error cuando la extensión no tiene una conexión abierta para ese perfil. */
         notConnected: (server: string) =>
             `No hay una conexión abierta contra ${server}. Conéctate desde el explorador de objetos y vuelve a abrir el panel.`,
+        /** Salvaguarda: el webview pidió una sección que el host no conoce. */
+        unknownSection: "El panel pidió una sección que no existe.",
     },
 } as const;

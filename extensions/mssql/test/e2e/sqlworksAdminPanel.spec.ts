@@ -16,8 +16,11 @@ import { DEFAULT_USER_CONFIG } from "./utils/launchVscodeWithMsSqlExt";
 import { getPassword, getServerName, getUserName } from "./utils/envConfigReader";
 
 /**
- * Comprobación del hito M2: el panel de administración abre desde el explorador de objetos y
- * sabe a qué servidor y base de datos apunta, reutilizando la conexión activa de la extensión.
+ * Comprobación de M2 y M3 en un solo recorrido:
+ *
+ * - **M2**: el panel de administración abre desde el explorador de objetos y sabe a qué servidor y
+ *   base de datos apunta, reutilizando la conexión activa de la extensión.
+ * - **M3**: sus cinco secciones de seguridad del servidor leen datos reales de la instancia.
  *
  * Requiere `test/e2e/.env` apuntando a una instancia alcanzable, igual que el resto de la suite.
  * FORK.md §13.1 explica cómo levantar una con Docker.
@@ -77,35 +80,39 @@ async function connectServerNode(page: Page) {
     throw new Error(`El nodo "${PROFILE_NAME}" no llegó a conectarse y expandirse.`);
 }
 
+/** Conecta, abre el panel desde el menú contextual del árbol y devuelve su webview. */
+async function openAdminPanel(page: Page) {
+    const serverNode = await connectServerNode(page);
+    await serverNode.click({ button: "right" });
+
+    const menuItem = page
+        .locator('.monaco-menu [role="menuitem"], .context-view [role="menuitem"]')
+        .filter({ hasText: /Administraci/ })
+        .first();
+    await menuItem.waitFor({ state: "visible", timeout: 30_000 });
+    // Los menús de VS Code no siempre confirman con un clic de ratón sintético: se enfoca el
+    // elemento pasando el cursor y se confirma con Enter.
+    await menuItem.hover();
+    await page.keyboard.press("Enter");
+
+    // El título del panel lo pone AdminPanelController a partir del nombre del servidor.
+    const panel = await getWebviewByTitle(page, `Administración · ${getServerName()}`);
+    await expect(panel.getByRole("heading", { name: "Administración" })).toBeVisible({
+        timeout: 60_000,
+    });
+    return panel;
+}
+
 test.describe("SQLWorks - Panel de administración", () => {
     const getContext = useSharedVsCodeLifecycle({
         launchOptions: { initialConfig: INITIAL_CONFIG },
     });
 
-    test("abre desde el explorador de objetos y muestra servidor y base de datos", async () => {
+    test("abre desde el árbol y lee las cinco secciones de seguridad del servidor", async () => {
         const { page } = getContext();
         const server = getServerName();
 
-        const serverNode = await connectServerNode(page);
-        await serverNode.click({ button: "right" });
-
-        const menuItem = page
-            .locator('.monaco-menu [role="menuitem"], .context-view [role="menuitem"]')
-            .filter({ hasText: /Administraci/ })
-            .first();
-        await menuItem.waitFor({ state: "visible", timeout: 30_000 });
-        // Los menús de VS Code no siempre confirman con un clic de ratón sintético: se enfoca el
-        // elemento pasando el cursor y se confirma con Enter.
-        await menuItem.hover();
-        await page.keyboard.press("Enter");
-
-        // El título del panel lo pone AdminPanelController a partir del nombre del servidor.
-        const panel = await getWebviewByTitle(page, `Administración · ${server}`);
-
-        // Cabecera del panel, y las filas de servidor y base de datos.
-        await expect(panel.getByRole("heading", { name: "Administración" })).toBeVisible({
-            timeout: 60_000,
-        });
+        const panel = await openAdminPanel(page);
         await expect(panel.getByText("Servidor", { exact: true })).toBeVisible();
         await expect(panel.getByText("Base de datos", { exact: true })).toBeVisible();
 
@@ -121,5 +128,81 @@ test.describe("SQLWorks - Panel de administración", () => {
         await expect(
             panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }),
         ).toBeVisible();
+
+        // ------------------------------------------------------------------
+        // M3: las cinco secciones de seguridad del servidor, en solo lectura.
+        // Van en el mismo test porque el panel se abre una vez: con el ciclo de vida compartido,
+        // abrir un segundo panel deja dos iframes `.webview` y el localizador deja de ser único.
+        // ------------------------------------------------------------------
+
+        /** Abre una pestaña y espera a que su contenido esté leído. */
+        const openTab = async (name: string) => {
+            await panel.getByRole("tab", { name }).click();
+            // La sección se lee al abrirla; mientras, la vista muestra el indicador de carga.
+            await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        };
+
+        // --- Logins (§8.1): el login sembrado, su tipo y su rol de servidor ---
+        await openTab("Logins");
+        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByRole("gridcell", { name: "Login SQL" }).first()).toBeVisible();
+        // parity_user pertenece a dbcreator: se sembró así en §13.1.
+        await expect(panel.getByRole("gridcell", { name: /dbcreator/ }).first()).toBeVisible();
+        // sa existe siempre, y BUILTIN\Administrators es un grupo de Windows.
+        await expect(panel.getByRole("gridcell", { name: "sa", exact: true })).toBeVisible();
+        await expect(
+            panel.getByRole("gridcell", { name: /Grupo de Windows/ }).first(),
+        ).toBeVisible();
+
+        // --- Roles de servidor (§8.2): roles fijos con sus miembros ---
+        await openTab("Roles de servidor");
+        await expect(panel.getByRole("gridcell", { name: "sysadmin" })).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByRole("gridcell", { name: "public" })).toBeVisible();
+        // Los roles internos ##MS_...## se filtran, como hace SSMS.
+        await expect(panel.getByRole("gridcell", { name: /##MS_/ })).toHaveCount(0);
+
+        // --- Permisos de servidor (§8.3) ---
+        await openTab("Permisos");
+        await expect(panel.getByRole("gridcell", { name: "CONNECT SQL" }).first()).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByRole("gridcell", { name: "Concedido" }).first()).toBeVisible();
+        // El objeto sobre el que cae el permiso: `public` tiene CONNECT sobre los puntos de
+        // conexión de fábrica, y sin esta columna esas filas serían indistinguibles.
+        await expect(
+            panel.getByRole("gridcell", { name: /Punto de conexión: TSQL/ }).first(),
+        ).toBeVisible();
+
+        // --- Propiedades de la instancia (§8.4) ---
+        await openTab("Instancia");
+        await expect(panel.getByText("Collation", { exact: true })).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(
+            panel.getByRole("definition").filter({ hasText: "SQL_Latin1_General_CP1_CI_AS" }),
+        ).toBeVisible();
+        await expect(
+            panel.getByRole("definition").filter({ hasText: "Developer Edition (64-bit)" }),
+        ).toBeVisible();
+        // Modo mixto: el contenedor de pruebas acepta autenticación SQL.
+        await expect(panel.getByRole("definition").filter({ hasText: /modo mixto/ })).toBeVisible();
+        await expect(panel.getByText("Rutas", { exact: true })).toBeVisible();
+
+        // --- Sesiones activas (§8.5) ---
+        await openTab("Sesiones");
+        // La propia sesión del panel tiene que aparecer marcada.
+        await expect(panel.getByText("Esta sesión").first()).toBeVisible({ timeout: 60_000 });
+        await expect(panel.getByRole("gridcell", { name: /ParityDb/ }).first()).toBeVisible();
+
+        // --- El buscador de la rejilla filtra ---
+        await openTab("Logins");
+        const search = panel.getByRole("textbox", { name: /Buscar por nombre/ });
+        await search.fill("parity");
+        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: "sa", exact: true })).toHaveCount(0);
     });
 });

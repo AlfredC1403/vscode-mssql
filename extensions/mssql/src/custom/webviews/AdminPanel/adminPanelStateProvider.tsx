@@ -5,14 +5,22 @@
 import * as React from "react";
 import { createContext, useMemo } from "react";
 
-import { AdminPanelReducers, AdminPanelState } from "../../sharedInterfaces/adminPanel";
+import {
+    AdminPanelReducers,
+    AdminPanelState,
+    AdminSection,
+} from "../../sharedInterfaces/adminPanel";
 import { useVscodeWebview } from "../../../webviews/common/vscodeWebviewProvider";
 import { getCoreRPCs } from "../../../webviews/common/utils";
 import { CoreRPCs } from "../../../sharedInterfaces/webview";
 
 export interface AdminPanelContextProps extends CoreRPCs {
-    /** Pide al host que vuelva a leer el objetivo de la conexión. */
+    /** Vuelve a leer el objetivo de la conexión y la sección visible. */
     refresh: () => void;
+    /** Cambia de sección. El host la carga si aún no se leyó. */
+    selectSection: (section: AdminSection) => void;
+    /** Fuerza la relectura de una sección. */
+    loadSection: (section: AdminSection) => void;
 }
 
 const AdminPanelContext = createContext<AdminPanelContextProps | undefined>(undefined);
@@ -28,6 +36,9 @@ const AdminPanelStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         () => ({
             ...getCoreRPCs(extensionRpc),
             refresh: () => extensionRpc.action("refresh", {}),
+            selectSection: (section: AdminSection) =>
+                extensionRpc.action("selectSection", { section }),
+            loadSection: (section: AdminSection) => extensionRpc.action("loadSection", { section }),
         }),
         [extensionRpc],
     );
