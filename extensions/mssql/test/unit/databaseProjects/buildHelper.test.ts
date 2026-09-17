@@ -16,6 +16,8 @@ import { ProjectType } from "vscode-mssql";
 import * as constants from "../../../src/databaseProjects/common/constants";
 import * as utils from "../../../src/databaseProjects/common/utils";
 import { SqlProjects } from "../../../src/constants/locConstants";
+// [FORK] Desde la constante, no un literal: así el renombrado del fork no rompe el test.
+import { mssqlExtensionId } from "../../../src/databaseProjects/common/extensionIds";
 
 suite("BuildHelper: Build Helper tests", function (): void {
     let sandbox: sinon.SinonSandbox;
@@ -78,7 +80,7 @@ suite("BuildHelper: Build Helper tests", function (): void {
         const buildHelper = new BuildHelper();
 
         // extensionBuildDirPath is set in the constructor — no network calls needed.
-        const extensionPath = vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ?? "";
+        const extensionPath = vscode.extensions.getExtension(mssqlExtensionId)?.extensionPath ?? "";
         expect(buildHelper.extensionBuildDirPath).to.equal(
             path.join(extensionPath, "BuildDirectory"),
         );
@@ -86,7 +88,7 @@ suite("BuildHelper: Build Helper tests", function (): void {
 
     test("Should have all required SystemDacpacs files for supported target platforms", async function (): Promise<void> {
         // Get the extension's build directory path
-        const extensionPath = vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ?? "";
+        const extensionPath = vscode.extensions.getExtension(mssqlExtensionId)?.extensionPath ?? "";
         const systemDacpacsPath = path.join(extensionPath, "BuildDirectory", "SystemDacpacs");
 
         // Verify SystemDacpacs folder exists

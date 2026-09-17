@@ -44,8 +44,8 @@ export class MssqlProtocolHandler {
 
     /**
      * Handles the given URI and returns connection information if applicable. Examples of URIs handled:
-     * - vscode://ms-mssql.mssql/connect?server=myServer&database=dbName&user=sa&authenticationType=SqlLogin
-     * - vscode://ms-mssql.mssql/connect?connectionString=Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;
+     * - vscode://alfredc1403.sqlworks/connect?server=myServer&database=dbName&user=sa&authenticationType=SqlLogin
+     * - vscode://alfredc1403.sqlworks/connect?connectionString=Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;
      *
      * @param uri - The URI to handle.
      * @returns The connection information or undefined if not applicable.

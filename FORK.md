@@ -21,18 +21,61 @@ Este archivo cumple dos funciones:
 
 ## 0. Archivos del upstream modificados
 
-**Ninguno todavía.** M0 es solo inventario.
-
-| Archivo | Qué se cambió | Por qué | Hito |
-| ------- | ------------- | ------- | ---- |
-| —       | —             | —       | —    |
-
 Cada línea nuestra dentro de un archivo del upstream lleva un comentario `// [FORK]` al inicio
 del bloque. Para auditarlas:
 
 ```bash
 git grep -n "\[FORK\]"
 ```
+
+| Archivo                                                         | Qué se cambió                                                                                                                                                                                                                                          | Por qué                                                                                                                                                        | Hito |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `extensions/mssql/package.json`                                 | Bloque de identidad (`name`, `displayName`, `version`, `description`, `publisher`, `icon`, `repository`, `bugs`, `homepage`, `galleryBanner`, `keywords`); título del contenedor de vistas; `extensionPack` sin `ms-dotnettools.vscode-dotnet-runtime` | Renombrado del §7 del brief. El runtime de .NET sobra porque el STS va autocontenido                                                                           | M1   |
+| `extensions/mssql/src/extension.ts`                             | **2 líneas**: el `import` de `disableTelemetry` y su llamada en lugar de `initializeTelemetryReporter(...)`                                                                                                                                            | Quitar el envío de telemetría. La lógica vive en `src/custom/overrides/telemetry.ts`                                                                           | M1   |
+| `extensions/mssql/README.md`                                    | Reescrito                                                                                                                                                                                                                                              | Se distribuye dentro del `.vsix` bajo nuestro nombre, y el del upstream es material de marca de Microsoft                                                      | M1   |
+| `extensions/mssql/images/extensionIcon.png`                     | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                   | El logotipo de Microsoft no se redistribuye. Lo importa `src/webviews/pages/Changelog/changelogPage.tsx:40`, así que conservar la ruta evita tocar ese webview | M1   |
+| `extensions/mssql/images/mssql-chat-avatar.jpg`                 | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                   | Ídem. Manteniendo la ruta no hay que tocar `extension.ts:155`                                                                                                  | M1   |
+| `extensions/mssql/images/yt-thumbnail.png`                      | **Eliminado**                                                                                                                                                                                                                                          | Recurso de marketing de Microsoft. Nada lo referenciaba en local: el README apuntaba a `raw.githubusercontent.com`                                             | M1   |
+| `extensions/mssql/images/mssql-demo.gif`                        | **Eliminado**                                                                                                                                                                                                                                          | Ídem, sin ninguna referencia                                                                                                                                   | M1   |
+| `extensions/mssql/src/constants/constants.ts`                   | **1 línea**: `extensionId` pasa a `alfredc1403.sqlworks`                                                                                                                                                                                               | La extensión se autolocaliza con `vscode.extensions.getExtension(extensionId)` en 6 sitios. Ver §15.6                                                          | M1   |
+| `extensions/mssql/src/databaseProjects/common/extensionIds.ts`  | **1 línea**: `mssqlExtensionId`                                                                                                                                                                                                                        | Ídem, segunda copia del mismo identificador                                                                                                                    | M1   |
+| `extensions/mssql/src/databaseProjects/tools/buildHelper.ts`    | **1 línea**: identificador en línea                                                                                                                                                                                                                    | Ídem, tercera copia                                                                                                                                            | M1   |
+| `extensions/mssql/src/integration/azureResourcesIntegration.ts` | **1 línea**: autoridad del URI `vscode://…/connect`                                                                                                                                                                                                    | VS Code enruta `vscode://<publisher>.<name>/…` al gestor de URI de la extensión                                                                                | M1   |
+| `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo                                                                                                                                                                                                | Quedaban desactualizadas tras el cambio anterior                                                                                                               | M1   |
+| `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                       | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
+
+### Archivos de test y de arnés e2e que el renombrado obligó a tocar
+
+Todos por la misma razón: fijaban el identificador de la extensión o el título del contenedor de
+vistas como literal. Detalle y síntomas en §15.6 y §15.7.
+
+| Archivo                                                              | Qué se cambió                                                      | Hito |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------ | ---- |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **1 línea**: selector de la pestaña de la barra de actividad       | M1   |
+| `extensions/mssql/test/e2e/utils/testHelpers.ts`                     | **1 línea**: el mismo selector                                     | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testUtils.ts`           | **2 líneas**: usa la constante en vez del literal, más su `import` | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testContext.ts`         | **2 líneas**: ídem                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/baselines/baselines.ts` | **2 líneas**: ídem                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/buildHelper.test.ts`    | **3 líneas**: ídem, dos usos                                       | M1   |
+| `extensions/mssql/test/unit/azureResourcesIntegration.test.ts`       | **2 líneas**: la aserción de la autoridad del URI, más su `import` | M1   |
+
+**Coste real de merge: nueve líneas de código de producto** repartidas en seis archivos, ninguna
+con lógica, más **trece líneas de infraestructura de test** en siete archivos. El resto son
+identidad, recursos binarios y un README, donde un conflicto se resuelve siempre quedándose con
+el nuestro.
+
+En los archivos de test el cambio es además a prueba de futuro: pasan a leer el identificador de
+la constante, así que un renombrado posterior no los vuelve a romper.
+
+### Archivos nuevos, que no generan conflicto
+
+| Archivo                                                       | Para qué                                                   |
+| ------------------------------------------------------------- | ---------------------------------------------------------- |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                        |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio |
+| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)              |
+| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft           |
+| `FORK.md`                                                     | Este archivo                                               |
 
 ---
 
@@ -700,3 +743,171 @@ extensions/mssql/src/custom/
 
 `src/custom/` va **dentro de `extensions/mssql/src/`**, no en la raíz del monorepo: es donde
 están el `package.json`, el `tsconfig` y el build que la van a compilar.
+
+---
+
+## 15. Renombrado (M1)
+
+### 15.1. Identidad
+
+| Campo                           | Antes                 | Ahora         |
+| ------------------------------- | --------------------- | ------------- |
+| `name`                          | `mssql`               | `sqlworks`    |
+| `displayName`                   | `SQL Server (mssql)`  | `SQLWorks`    |
+| `publisher`                     | `ms-mssql`            | `alfredc1403` |
+| `version`                       | `1.46.0`              | `0.1.0`       |
+| `icon`                          | logotipo de Microsoft | obra propia   |
+| Título del contenedor de vistas | `SQL Server`          | `SQLWorks`    |
+
+El identificador completo de la extensión pasa de `ms-mssql.mssql` a `alfredc1403.sqlworks`, así
+que VS Code las trata como extensiones distintas.
+
+**Versión:** propia desde `0.1.0`. La base del upstream se anota en la tabla de cabecera de este
+archivo y se actualiza en cada merge. Así dos builds nuestros sobre la misma base se distinguen.
+
+### 15.2. Prefijo de identificadores: se conserva `mssql.`
+
+Los 119 comandos, las 166 opciones de configuración y las vistas siguen llamándose `mssql.*`.
+**Renombrarlos sería el cambio más caro posible en este fork:** los identificadores están en
+`src/constants/constants.ts` y referenciados por centenares de archivos del upstream, y cada
+merge futuro traería conflictos en todos ellos. Es exactamente lo que la regla de oro del §4 del
+brief quiere evitar, y el propio brief lo permite («deja los existentes como están, salvo que haya
+conflicto con la extensión oficial»).
+
+Lo nuevo sí usa prefijo propio: **`sqlworks.`**
+
+Consecuencia que hay que respetar: **no se pueden tener SQLWorks y la extensión MSSQL oficial
+instaladas a la vez**, porque los dos declararían los mismos `mssql.*`. Está avisado en el README
+de la extensión. Si algún día hiciera falta convivencia, habría que renombrar el prefijo y asumir
+el coste.
+
+### 15.3. Telemetría
+
+Cortada en `src/custom/overrides/telemetry.ts`, con dos líneas en `src/extension.ts`. El
+razonamiento completo está en el comentario de ese archivo; en resumen:
+
+- Los tres emisores del upstream (extensión, relé de `telemetry/sqlevent` del STS, y `Perf`)
+  comparten un único `telemetryReporter` del extension-toolkit. Basta con dejarlo sin transporte.
+- Se cierran **las dos** vías de entrada de la clave: `package.json` → `aiKey`, y la variable de
+  entorno `MSSQL_APP_INSIGHTS_KEY` que el constructor del reporter consulta como respaldo.
+- `test/unit/custom/telemetryOverride.test.ts` lo fija con cuatro tests, para que un merge no lo
+  revierta en silencio.
+- `scripts/package-fork.js` aborta el empaquetado si `package.json` declara `aiKey`.
+
+El único `http.request` que queda en el árbol es el sink de `src/diagnostics/sinks.ts`, que exige
+`PERF_MODE=1` más `PERF_MARKER_URL` y `PERF_CONTROL_TOKEN`: es el arnés local de `tools/perftest`,
+no un canal hacia el exterior. No se toca.
+
+### 15.4. Empaquetado
+
+`extensions/mssql/scripts/package-fork.js` (archivo nuevo) empaqueta **una** plataforma con el
+SQL Tools Service autocontenido dentro, reutilizando las funciones que exporta
+`package-extension.js` del upstream:
+
+```bash
+npm run build -- --target mssql        # desde la raíz
+cd extensions/mssql
+node scripts/package-fork.js --platform win-x64
+```
+
+El modo `--offline` del upstream recorre las seis plataformas y tarda mucho; para distribución
+interna sobra. Tampoco hace falta su `withOfflinePackageManifest`, porque este fork ya no declara
+`ms-dotnettools.vscode-dotnet-runtime` en `extensionPack`.
+
+### 15.5. Restos cosméticos que se dejan a propósito
+
+Tres cadenas de `package.nls.json` siguen diciendo «MSSQL extension»:
+`mssql.openInMssqlExtensionFromAzureResources`, `mssql.enableExperimentalFeatures.description` y
+`mssql.walkthroughs.nextSteps.description`. Cambiarlas obligaría a tocar un archivo de
+localización generado del upstream, que AGENTS.md prohíbe editar a mano, por tres textos
+descriptivos. Se dejan.
+
+El `README.md` de la raíz del monorepo también sigue siendo el de Microsoft. No se distribuye en
+el `.vsix` y tocarlo es deuda de merge sin ganancia funcional. Si se quiere cambiar, es un cambio
+de una sola vez y sin riesgo.
+
+### 15.6. El identificador de la extensión se autorreferencia: cinco sitios
+
+Esto no estaba previsto y es el hallazgo caro de M1. Renombrar `publisher` y `name` cambia el
+identificador de `ms-mssql.mssql` a `alfredc1403.sqlworks`, y **la extensión se busca a sí misma
+por ese identificador**. Si no se actualiza, `src/configurations/changelog.ts:267` hace
+`vscode.extensions.getExtension(constants.extensionId).packageJSON.version` sobre `undefined` y
+**el host de extensiones revienta al cargar el módulo**, no al usar la función.
+
+Se detectó porque la suite de tests pasó de 5103 pruebas a 89: el fallo aborta la carga.
+
+Los cinco sitios están en la tabla del §0. Tres son copias del mismo literal
+(`constants.ts`, `databaseProjects/common/extensionIds.ts`, `databaseProjects/tools/buildHelper.ts`),
+uno es la autoridad del URI de `vscode://…/connect`, y el último son dos comentarios.
+
+Lo que **no** se toca, porque son identificadores de contribución declarados en nuestro propio
+`package.json` y no dependen del publisher:
+
+- `ms-mssql.sql-result-renderer` — el `notebookRenderer` que contribuimos.
+- `ms-mssql.sql-notebook-controller` — el controlador de notebooks.
+
+Tampoco se tocan las referencias a **otras** extensiones, que siguen siendo de Microsoft:
+`ms-mssql.sql-database-projects-vscode`, `ms-mssql.data-workspace-vscode`,
+`ms-mssql.mssql-database-management-keymap`.
+
+**Comprobación para después de cada merge:** si el upstream añade un nuevo
+`getExtension("ms-mssql.mssql")`, el síntoma es el host de extensiones cayéndose al arrancar.
+
+```bash
+git grep -n '"ms-mssql\.mssql"' -- extensions/mssql/src
+```
+
+Tiene que devolver cero resultados.
+
+### 15.7. Otros sitios que el renombrado rompió
+
+Además de los cinco del §15.6, el cambio de título del contenedor de vistas
+(`SQL Server` → `SQLWorks`) rompió el **arnés e2e**, que buscaba la pestaña de la barra de
+actividad por su etiqueta:
+
+| Archivo                                                       | Línea                               |
+| ------------------------------------------------------------- | ----------------------------------- |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts` | selector `aria-label^="SQL Server"` |
+| `extensions/mssql/test/e2e/utils/testHelpers.ts`              | el mismo selector                   |
+
+Síntoma: **todos** los tests e2e fallan con timeout al arrancar, porque el lanzador no encuentra
+la pestaña. Arreglado con el título nuevo en las dos.
+
+Y cinco archivos de test que fijaban el identificador de la extensión como literal. Todos pasan
+ahora a leerlo de la constante, así que un renombrado futuro no los vuelve a romper:
+
+| Archivo                                             | Qué hacía                                                                                     |
+| --------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `test/unit/databaseProjects/testUtils.ts`           | `getExtension("ms-mssql.mssql")`, y lanzaba «MSSQL extension is unavailable in the test host» |
+| `test/unit/databaseProjects/testContext.ts`         | ídem                                                                                          |
+| `test/unit/databaseProjects/baselines/baselines.ts` | ídem, degradaba la ruta base a `""` en silencio                                               |
+| `test/unit/databaseProjects/buildHelper.test.ts`    | ídem, dos veces                                                                               |
+| `test/unit/azureResourcesIntegration.test.ts`       | `expect(uri.authority).to.equal("ms-mssql.mssql")`                                            |
+
+Lo que **no** se toca: los nueve `vscode://ms-mssql.mssql/...` de
+`test/unit/mssqlProtocolHandler.test.ts`. El gestor de URI no mira la autoridad (VS Code ya la ha
+usado para enrutar), así que esos tests pasan igual. Cambiarlos sería deuda de merge por estética.
+
+### 15.8. Verificación de M1
+
+| Comprobación                                               | Resultado                                                                      |
+| ---------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| `npm run build -- --target mssql`                          | ✅                                                                             |
+| `npm run lint -- --target mssql`                           | ✅                                                                             |
+| `npm test -- --target mssql`                               | ✅ **5107 pasan, 0 fallan**, 17 omitidos (290 archivos)                        |
+| `node scripts/package-fork.js --platform win-x64`          | ✅ `sqlworks-0.1.0-win-x64.vsix`, 118,93 MB, 1492 archivos                     |
+| Identidad dentro del paquete                               | ✅ `alfredc1403.sqlworks` v0.1.0, icono propio                                 |
+| `aiKey` en el paquete                                      | ✅ ausente                                                                     |
+| `LICENSE.txt` y `ThirdPartyNotices.txt` en el paquete      | ✅ intactos                                                                    |
+| STS empaquetado                                            | ✅ `MicrosoftSqlToolsServiceLayer.exe` nativo, con el runtime de .NET incluido |
+| Recursos de marca de Microsoft en el paquete               | ✅ ninguno                                                                     |
+| Instalación del `.vsix` en ventana limpia y activación     | ✅ `vsix.spec.ts`, 2 tests                                                     |
+| STS del paquete funcionando **sin `dotnet` en la máquina** | ✅ los 6 puntos del arnés de paridad, contra el binario extraído del `.vsix`   |
+
+Los 4 tests nuevos de `telemetryOverride.test.ts` están dentro de los 5107.
+
+La última fila es la que valida la decisión 11.4. Se generó un paquete `linux-x64` solo para
+poder comprobarlo aquí, se extrajo su `sqltoolsservice/` y se corrió el arnés del §13.1 contra ese
+binario, con `dotnet` ausente del sistema. Arrancó y los seis puntos pasaron, así que el
+`.vsix` offline es de verdad autocontenido. El paquete `linux-x64` se descartó después: el que se
+distribuye es `win-x64`.

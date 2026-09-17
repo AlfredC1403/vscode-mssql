@@ -5,7 +5,9 @@
 
 // Collection of Non-localizable Constants
 export const languageId = "sql";
-export const extensionId = "ms-mssql.mssql";
+// [FORK] Identificador propio del fork. La extensión se autolocaliza con este valor
+// (vscode.extensions.getExtension), así que tiene que coincidir con publisher.name del package.json.
+export const extensionId = "alfredc1403.sqlworks";
 export const extensionName = "mssql";
 export const extensionConfigSectionName = "mssql";
 export const telemetryConfigSectionName = "telemetry";

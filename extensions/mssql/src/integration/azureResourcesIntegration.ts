@@ -81,8 +81,10 @@ export class AzureResourcesExtensionIntegration {
             params.set("tenantId", subscription.tenantId);
         }
 
+        // [FORK] VS Code enruta vscode://<publisher>.<name>/... al gestor de URI de la extensión,
+        // así que este identificador tiene que ser el nuestro.
         const uri = vscode.Uri.parse(
-            `${vscode.env.uriScheme}://ms-mssql.mssql/connect?${params.toString()}`,
+            `${vscode.env.uriScheme}://alfredc1403.sqlworks/connect?${params.toString()}`,
         );
 
         this._logger.debug(

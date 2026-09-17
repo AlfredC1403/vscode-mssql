@@ -168,7 +168,8 @@ export async function launchVsCodeWithMssqlExtension(
     await page.setViewportSize({ width: 1920, height: 1080 });
 
     // Activate MSSQL tab if not already selected
-    const sqlTab = page.locator('[role="tab"][aria-label^="SQL Server"]');
+    // [FORK] El contenedor de vistas se llama SQLWorks, no "SQL Server". Ver FORK.md §15.1.
+    const sqlTab = page.locator('[role="tab"][aria-label^="SQLWorks"]');
     if ((await sqlTab.getAttribute("aria-selected")) !== "true") {
         const tabLink = sqlTab.locator("a");
         await tabLink.waitFor({ state: "visible", timeout: 30_000 });

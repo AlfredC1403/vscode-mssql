@@ -13,10 +13,11 @@ import {
     ExtensionContextService,
     IExtensionContextService,
     initializeExtensionToolkit,
-    initializeTelemetryReporter,
     sendActionEvent,
     telemetryReporter,
 } from "extension-toolkit/vscode";
+// [FORK] Telemetría desactivada por completo. Ver src/custom/overrides/telemetry.ts
+import { disableTelemetry } from "./custom/overrides/telemetry";
 import MainController from "./controllers/mainController";
 import { IExtension } from "vscode-mssql";
 import SqlToolsServerClient from "./languageservice/serviceclient";
@@ -114,7 +115,8 @@ class MssqlActivation {
 
     async activate(): Promise<IExtension> {
         const context = this._contextService.context;
-        initializeTelemetryReporter(context.extension.packageJSON.aiKey);
+        // [FORK] Sustituye a initializeTelemetryReporter(context.extension.packageJSON.aiKey)
+        disableTelemetry();
 
         // Create the coordinator early so uriOwnershipApi is available for export.
         uriOwnershipCoordinator = createUriOwnershipCoordinator(context);

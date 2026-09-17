@@ -19,6 +19,7 @@ import {
     mockSubscriptions,
 } from "./azureHelperStubs";
 import { createStubLogger } from "./utils";
+import * as Constants from "../../src/constants/constants";
 
 chai.use(sinonChai);
 
@@ -78,7 +79,8 @@ suite("AzureResourcesExtensionIntegration Tests", () => {
 
         const uri = protocolHandler.handleUri.firstCall.args[0];
         expect(uri.scheme).to.equal(vscode.env.uriScheme);
-        expect(uri.authority).to.equal("ms-mssql.mssql");
+        // [FORK] Desde la constante, no un literal: así el renombrado del fork no rompe el test.
+        expect(uri.authority).to.equal(Constants.extensionId);
         expect(uri.path).to.equal("/connect");
 
         const params = new URLSearchParams(uri.query);

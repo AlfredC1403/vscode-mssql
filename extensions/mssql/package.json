@@ -1,24 +1,24 @@
 {
-    "name": "mssql",
-    "displayName": "SQL Server (mssql)",
-    "version": "1.46.0",
-    "description": "Design and optimize schemas for SQL Server, Azure SQL, and SQL Database in Fabric using a modern, lightweight extension built for developers",
-    "publisher": "ms-mssql",
+    "name": "sqlworks",
+    "displayName": "SQLWorks",
+    "version": "0.1.0",
+    "description": "Cliente de SQL Server con administración de servidores, bases de datos y usuarios, biblioteca de snippets y formateador de T-SQL configurable. Fork interno de vscode-mssql.",
+    "publisher": "alfredc1403",
     "preview": false,
     "license": "SEE LICENSE IN LICENSE.txt",
-    "icon": "images/extensionIcon.png",
+    "icon": "images/sqlworksIcon.png",
     "galleryBanner": {
-        "color": "#2F2F2F",
+        "color": "#12243D",
         "theme": "dark"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/Microsoft/vscode-mssql.git"
+        "url": "https://github.com/AlfredC1403/vscode-mssql.git"
     },
     "bugs": {
-        "url": "https://github.com/Microsoft/vscode-mssql/issues"
+        "url": "https://github.com/AlfredC1403/vscode-mssql/issues"
     },
-    "homepage": "https://github.com/Microsoft/vscode-mssql/blob/main/mssql/README.md",
+    "homepage": "https://github.com/AlfredC1403/vscode-mssql/blob/main/FORK.md",
     "engines": {
         "vscode": "^1.105.0"
     },
@@ -27,11 +27,11 @@
         "Azure"
     ],
     "keywords": [
+        "SQLWorks",
         "SQL",
         "MSSQL",
-        "SQL database in Fabric",
-        "Azure SQL Database",
         "SQL Server",
+        "T-SQL",
         "multi-root ready"
     ],
     "activationEvents": [
@@ -48,8 +48,7 @@
     "extensionPack": [
         "ms-mssql.data-workspace-vscode",
         "ms-mssql.sql-database-projects-vscode",
-        "ms-mssql.sql-bindings-vscode",
-        "ms-dotnettools.vscode-dotnet-runtime"
+        "ms-mssql.sql-bindings-vscode"
     ],
     "scripts": {
         "build:runtime-localization": "node ../../scripts/localization-generate.js vscode-mssql .",
@@ -212,7 +211,7 @@
             "activitybar": [
                 {
                     "id": "objectExplorer",
-                    "title": "SQL Server",
+                    "title": "SQLWorks",
                     "icon": "media/server_page_dark.svg"
                 }
             ],

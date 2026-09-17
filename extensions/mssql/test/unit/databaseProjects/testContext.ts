@@ -6,6 +6,8 @@
 import * as vscode from "vscode";
 import * as path from "path";
 import * as vscodeMssql from "vscode-mssql";
+// [FORK] Desde la constante, no un literal: así el renombrado del fork no rompe el test.
+import { mssqlExtensionId } from "../../../src/databaseProjects/common/extensionIds";
 import {
     TaskExecutionMode,
     ExtractTarget,
@@ -171,7 +173,7 @@ export class MockDacFxService implements vscodeMssql.IDacFxService {
 
 export function createContext(): TestContext {
     const extensionPath =
-        vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ??
+        vscode.extensions.getExtension(mssqlExtensionId)?.extensionPath ??
         path.join(__dirname, "..", "..", "..", "..");
 
     return {

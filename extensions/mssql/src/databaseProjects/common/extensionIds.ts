@@ -3,4 +3,5 @@
  *  Licensed under the MIT License. See License.txt in the project root for license information.
  *--------------------------------------------------------------------------------------------*/
 
-export const mssqlExtensionId = "ms-mssql.mssql";
+// [FORK] Identificador propio del fork. Ver src/constants/constants.ts.
+export const mssqlExtensionId = "alfredc1403.sqlworks";

@@ -17,7 +17,8 @@ export async function addDatabaseConnection(
 ): Promise<void> {
     let iframe: FrameLocator;
     // Navigate to Sql Server Tab
-    const sqlServerTabContainer = vsCodePage.locator('[role="tab"][aria-label^="SQL Server"]');
+    // [FORK] El contenedor de vistas se llama SQLWorks, no "SQL Server". Ver FORK.md §15.1.
+    const sqlServerTabContainer = vsCodePage.locator('[role="tab"][aria-label^="SQLWorks"]');
     const isSelected = await sqlServerTabContainer.getAttribute("aria-selected");
 
     if (isSelected !== "true") {
