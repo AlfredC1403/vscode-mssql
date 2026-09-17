@@ -1398,3 +1398,117 @@ Lo que comprueba el e2e con datos reales sembrados en §13.1, no con dobles:
 - **No resuelve permisos heredados.** La duda del §18.4 —si `effectivePermissions` resuelve la
   herencia por rol— sigue abierta y se comprueba en M4. M3 muestra solo permisos **explícitos** de
   servidor, que es lo que devuelve `sys.server_permissions`, y la leyenda de la rejilla lo dice.
+
+---
+
+## 20. Bloqueos y terminación de sesiones (añadido a M3)
+
+Dos añadidos pedidos sobre la sección de sesiones: **cuánto lleva abierta la transacción más
+antigua** de cada sesión, para encontrar al que bloquea, y un **botón para terminar** esa sesión.
+Esto último es la **primera operación del fork que escribe en el servidor**, así que aquí está todo
+lo que la rodea.
+
+### 20.1. El tiempo de la transacción, no el número
+
+`sys.dm_exec_sessions.open_transaction_count` dice cuántas transacciones tiene abiertas una sesión,
+pero no desde cuándo, y para cazar un bloqueo lo que importa es el tiempo. Sale de
+`dm_tran_session_transactions` cruzada con `dm_tran_active_transactions`, con `MIN(...)` sobre
+`transaction_begin_time`: **una sesión puede tener varias transacciones abiertas a la vez**, y la que
+está bloqueando al resto es la más antigua.
+
+La rejilla pasa a ordenarse por ese valor, así que quien abre el panel buscando un bloqueo lo
+encuentra en la primera fila. La duración se pinta con `formatSeconds` (`4 s`, `3 min 20 s`,
+`2 h 5 min`), y el momento exacto va en el tooltip porque una transacción puede llevar abierta días.
+
+### 20.2. Lo que dijo el servidor, y lo que cambió el diseño
+
+Comprobado contra SQL Server 2022 antes de escribir la interfaz:
+
+| Prueba                                   | Resultado del motor                                                       |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| `KILL` dentro de `BEGIN TRANSACTION`     | **Error 6115**: «KILL command cannot be used inside user transactions»    |
+| `KILL` de la propia sesión               | **Error 6104**: «Cannot use KILL to kill your own process»                |
+| `KILL` sin permiso (como `parity_user`)  | **Error 6102**: «User does not have permission to use the KILL statement» |
+| `KILL` de un identificador que no existe | **Error 6106**: «Process ID 9999 is not an active process ID»             |
+| Permisos de `sa`                         | `sysadmin`, `processadmin` y `ALTER ANY CONNECTION`: los tres a 1         |
+| Permisos de `parity_user` (`dbcreator`)  | los tres a 0                                                              |
+
+Dos consecuencias de diseño, no cosméticas:
+
+1. **El `KILL` va suelto, sin transacción.** El §11.6 del brief pide transacción explícita con
+   `SET XACT_ABORT ON` para los lotes; este es exactamente el caso que el propio brief exceptúa
+   («las sentencias que SQL Server no permite dentro de una transacción van aparte y se marcan como
+   irreversibles en la vista previa»). El diálogo lo dice con esas palabras.
+2. **Los identificadores de sesión se reutilizan de inmediato.** Al terminar la sesión 54, la
+   conexión siguiente del propio sondeo recibió el 54. Un panel abierto un rato puede tener en
+   pantalla un número que ya es de otra conexión, así que antes de ejecutar se vuelve a leer la
+   sesión y se compara su identidad (identificador, momento de inicio de sesión, login y equipo). Si
+   no coincide, **no se termina nada**: se avisa y se recarga la lista.
+
+### 20.3. La cadena de comprobaciones antes de escribir
+
+Por orden, en `AdminPanelController.killSession`:
+
+1. La fila tiene que seguir en el estado del panel.
+2. **Se releen los permisos en el momento**, sin fiarse de lo leído al abrir la sección: un cambio de
+   rol en el servidor no avisa al panel. Si no se pueden leer, no se ejecuta nada.
+3. No se permite terminar la sesión del propio panel (el motor daría el 6104).
+4. Se comprueba que el identificador siga siendo de la misma sesión (§20.2).
+5. **Diálogo modal con la identidad de la sesión, el aviso de la transacción abierta y la sentencia
+   exacta**, con el número en el botón para que no se confirme a ciegas (regla 11.1 del brief).
+6. Solo entonces se ejecuta, y siempre se recarga la lista después.
+
+El permiso se lee con `HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY CONNECTION')`, que ya devuelve 1
+para `sysadmin` y `processadmin`. Los dos roles se leen además por separado para poder decir **de
+dónde** sale el permiso en el tooltip del botón, en lugar de un «no tienes permiso» a secas.
+
+### 20.4. Dónde vive lo que escribe
+
+- `src/custom/admin/sql/queries/killSession.ts`: la sentencia, la consulta de permisos, la de
+  identidad y las funciones puras que las mapean y comparan.
+- `src/custom/admin/sessionAdminService.ts`: **el único archivo del fork que ejecuta algo que no es
+  un `SELECT`**. No pregunta ni confirma: eso es del controlador. Está aislado a propósito para que
+  auditar «qué escribe el fork» sea leer un archivo.
+- `src/custom/sharedInterfaces/duration.ts`: el formato de duraciones, compartido host ↔ webview.
+  Va en esa carpeta porque ya está en los dos `tsconfig`, así que **no costó ninguna línea del
+  upstream**; el propio upstream pone funciones puras ahí (`queryResultCellCodec.ts`,
+  `selectionSummary.ts`).
+
+### 20.5. `identifiers.ts`: por qué sigue sin existir, y qué lo sustituye aquí
+
+`KILL` no acepta parámetros, así que el identificador se concatena: es el primer sitio del fork
+donde algo de fuera entra en una sentencia. La regla 11.2 del brief se cumple **validando y
+abortando**, nunca escapando: `assertSessionId` exige un entero positivo seguro y lanza con
+cualquier otra cosa. Los tests pasan `"78; DROP DATABASE Ventas"`, `"1 OR 1=1"`, `1.5`, `0`, `-1`,
+`NaN`, `null` y `{}`, y todos abortan.
+
+Sigue sin hacer falta `src/custom/util/identifiers.ts` porque aquí no hay **ningún identificador**:
+hay un número. El validador de identificadores con `QUOTENAME` llega con la primera consulta que
+reciba un nombre, que es M4.
+
+### 20.6. Verificación
+
+| Comprobación                        | Resultado                                                               |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `npm run build -- --target mssql`   | ✅                                                                      |
+| `npm run lint -- --target mssql`    | ✅                                                                      |
+| `npm test -- --target mssql`        | ✅ **5169 pasan, 0 fallan** (4964 + 205 de `sql-database-projects`)     |
+| Tests propios nuevos                | ✅ 12 de la sentencia y los permisos, 7 del flujo completo, 2 del mapeo |
+| Semántica de `KILL` en el motor     | ✅ los cinco casos del §20.2, contra SQL Server 2022                    |
+| Interfaz                            | ✅ en `test/e2e/sqlworksAdminPanel.spec.ts`                             |
+| Terminar de verdad, por la interfaz | ✅ comprobado contra una sesión con transacción abierta (ver abajo)     |
+
+Lo que fija el test e2e que se commitea: la columna nueva existe, el botón está **deshabilitado** en
+la sesión del propio panel y habilitado en las demás (el perfil e2e conecta como `sa`), y al pulsarlo
+sale el diálogo con `KILL <n>;` y la palabra «irreversible». **Ese test cancela**: no termina
+ninguna sesión.
+
+El camino completo se comprobó aparte, con una especificación temporal que abría una víctima con una
+transacción abierta en el contenedor de pruebas: el panel la mostró con `4 s` de transacción, el
+diálogo pidió confirmación con `KILL 70;`, al confirmar la fila desapareció y las sesiones con
+transacción abierta pasaron de 1 a 0, es decir el motor revirtió la transacción. Ese archivo no se
+commitea porque depende de Docker; lo que queda fijado en la suite es todo lo demás.
+
+**Nota sobre el diálogo en el test e2e:** los modales de VS Code son ventanas nativas del sistema y
+Playwright no las ve, así que el perfil del test fija `window.dialogStyle: "custom"`. Es solo del
+entorno de pruebas; en uso normal el diálogo es el nativo del sistema operativo.

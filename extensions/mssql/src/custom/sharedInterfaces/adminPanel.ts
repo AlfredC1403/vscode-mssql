@@ -13,6 +13,7 @@ import { CustomWebviewKind, CustomWebviewStateBase } from "./customWebview";
 import {
     ActiveSession,
     InstanceProperties,
+    KillPermissions,
     Login,
     ServerPermission,
     ServerRole,
@@ -78,6 +79,18 @@ export interface SectionState<T> {
     readAt?: string;
 }
 
+/**
+ * Qué puede hacer la conexión actual con las sesiones.
+ *
+ * Se publican los hechos, no el texto: el webview arma el mensaje con sus propios textos, igual que
+ * el resto de la interfaz. `undefined` en el estado significa «todavía no se ha comprobado», que no
+ * es lo mismo que «no se puede».
+ */
+export interface SessionCapabilities extends KillPermissions {
+    /** `true` si alguno de los tres permisos anteriores alcanza para `KILL`. */
+    canKill: boolean;
+}
+
 /** Estado del panel de administración. */
 export interface AdminPanelState extends CustomWebviewStateBase {
     view: CustomWebviewKind.AdminPanel;
@@ -92,6 +105,8 @@ export interface AdminPanelState extends CustomWebviewStateBase {
     serverPermissions: SectionState<ServerPermission[]>;
     instance: SectionState<InstanceProperties>;
     sessions: SectionState<ActiveSession[]>;
+    /** Permisos sobre sesiones, leídos junto con la sección de sesiones. */
+    sessionCapabilities?: SessionCapabilities;
 }
 
 /**
@@ -106,6 +121,12 @@ export interface AdminPanelReducers {
     selectSection: { section: AdminSection };
     /** Fuerza la relectura de una sección. */
     loadSection: { section: AdminSection };
+    /**
+     * Pide terminar una sesión. El host comprueba permisos, que no sea la propia y que el
+     * identificador siga siendo de la misma sesión, y **pide confirmación mostrando la sentencia**
+     * antes de ejecutar nada.
+     */
+    killSession: { sessionId: number };
 }
 
 /** Clave del estado donde vive cada sección cargable. */

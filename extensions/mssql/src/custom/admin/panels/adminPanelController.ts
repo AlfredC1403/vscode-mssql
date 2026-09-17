@@ -13,12 +13,17 @@ import {
     AdminSection,
     SECTION_STATE_KEYS,
     SectionState,
+    SessionCapabilities,
 } from "../../sharedInterfaces/adminPanel";
 import { CustomWebviewKind } from "../../sharedInterfaces/customWebview";
 import { resolveConnectionTarget } from "../../util/connectionTarget";
 import { Strings } from "../../strings";
 import { AdminQueryRunner } from "../sql/execute";
 import { ServerSecurityService, SectionResult } from "../serverSecurityService";
+import { SessionAdminService } from "../sessionAdminService";
+import { buildKillStatement, canKillSessions, isSameSession } from "../sql/queries/killSession";
+import { ActiveSession, KillPermissions } from "../sql/types";
+import { formatSeconds } from "../../sharedInterfaces/duration";
 
 /**
  * Nombre del bundle de esbuild, común a todas las vistas del fork. Tiene que coincidir con la
@@ -53,6 +58,7 @@ export class AdminPanelController extends WebviewPanelController<
     public readonly connectionUri: string;
 
     private readonly security: ServerSecurityService;
+    private readonly sessionAdmin: SessionAdminService;
 
     private constructor(
         context: vscode.ExtensionContext,
@@ -73,9 +79,9 @@ export class AdminPanelController extends WebviewPanelController<
         });
 
         this.connectionUri = connectionUri;
-        this.security = new ServerSecurityService(
-            new AdminQueryRunner(connectionManager, connectionUri),
-        );
+        const runner = new AdminQueryRunner(connectionManager, connectionUri);
+        this.security = new ServerSecurityService(runner);
+        this.sessionAdmin = new SessionAdminService(runner);
         this.registerReducers();
     }
 
@@ -144,6 +150,137 @@ export class AdminPanelController extends WebviewPanelController<
             }
             return state;
         });
+
+        this.registerReducer("killSession", async (state, payload) => {
+            await this.killSession(state, payload.sessionId);
+            // `killSession` publica el estado por su cuenta (permisos y recarga de la sección).
+            return this.state;
+        });
+    }
+
+    /**
+     * Termina una sesión, con todas las comprobaciones que exige el §11 del brief antes de escribir
+     * nada en el servidor:
+     *
+     * 1. La fila tiene que seguir en el estado del panel.
+     * 2. Se releen los permisos **en el momento**, sin fiarse de lo que se leyó al abrir la sección:
+     *    un cambio de rol en el servidor no avisa al panel.
+     * 3. No se permite terminar la sesión del propio panel (SQL Server daría el error 6104).
+     * 4. Se vuelve a leer la sesión y se compara su identidad: los identificadores se reutilizan.
+     * 5. Se muestra la sentencia exacta y se pide confirmación.
+     *
+     * Solo después se ejecuta, y siempre se recarga la lista al terminar.
+     */
+    private async killSession(state: AdminPanelState, sessionId: number): Promise<void> {
+        const session = state.sessions?.data?.find((item) => item.sessionId === sessionId);
+        if (!session) {
+            void vscode.window.showErrorMessage(Strings.killSession.unknownSession);
+            return;
+        }
+
+        const permissions = await this.sessionAdmin.loadPermissions();
+        if (permissions.errorMessage || !permissions.permissions) {
+            void vscode.window.showErrorMessage(
+                Strings.killSession.permissionUnknown(
+                    permissions.errorMessage ?? Strings.adminPanel.unknownSection,
+                ),
+            );
+            return;
+        }
+
+        this.publishCapabilities(permissions.permissions);
+
+        if (!canKillSessions(permissions.permissions)) {
+            void vscode.window.showErrorMessage(
+                Strings.killSession.noPermission(permissions.permissions.loginName),
+            );
+            return;
+        }
+
+        if (sessionId === permissions.permissions.currentSessionId) {
+            void vscode.window.showErrorMessage(Strings.killSession.ownSession);
+            return;
+        }
+
+        const snapshot = await this.sessionAdmin.readSnapshot(sessionId);
+        if (snapshot.errorMessage) {
+            void vscode.window.showErrorMessage(
+                Strings.killSession.failed(sessionId, snapshot.errorMessage),
+            );
+            return;
+        }
+        if (!snapshot.snapshot) {
+            void vscode.window.showWarningMessage(Strings.killSession.alreadyGone(sessionId));
+            await this.loadSection(AdminSection.Sessions);
+            return;
+        }
+        if (!isSameSession(snapshot.snapshot, session)) {
+            void vscode.window.showWarningMessage(Strings.killSession.reused(sessionId));
+            await this.loadSection(AdminSection.Sessions);
+            return;
+        }
+
+        const statement = buildKillStatement(sessionId);
+        if (!(await this.confirmKill(session, statement))) {
+            return;
+        }
+
+        const outcome = await this.sessionAdmin.kill(sessionId);
+        if (this.isDisposed) {
+            return;
+        }
+        if (outcome.errorMessage) {
+            void vscode.window.showErrorMessage(
+                Strings.killSession.failed(sessionId, outcome.errorMessage),
+            );
+        } else {
+            void vscode.window.showInformationMessage(Strings.killSession.done(sessionId));
+        }
+
+        await this.loadSection(AdminSection.Sessions);
+    }
+
+    /**
+     * Diálogo modal con la identidad de la sesión, lo que se pierde y **la sentencia exacta**, como
+     * pide la regla 11.1 del brief. El botón lleva el número de sesión para que no se confirme a
+     * ciegas.
+     */
+    private async confirmKill(session: ActiveSession, statement: string): Promise<boolean> {
+        const summary = Strings.killSession.sessionSummary(
+            session.loginName,
+            session.hostName,
+            session.programName,
+            session.databaseName,
+        );
+        const transactionWarning =
+            session.longestOpenTransactionSeconds > 0
+                ? `\n\n${Strings.killSession.openTransactionWarning(
+                      formatSeconds(session.longestOpenTransactionSeconds),
+                  )}`
+                : "";
+        const action = Strings.killSession.confirmAction(session.sessionId);
+
+        const chosen = await vscode.window.showWarningMessage(
+            Strings.killSession.confirmTitle(session.sessionId),
+            {
+                modal: true,
+                detail: Strings.killSession.confirmDetail(
+                    `${summary}${transactionWarning}`,
+                    statement,
+                ),
+            },
+            action,
+        );
+        return chosen === action;
+    }
+
+    /** Publica en el estado qué puede hacer la conexión con las sesiones. */
+    private publishCapabilities(permissions: KillPermissions): void {
+        const capabilities: SessionCapabilities = {
+            ...permissions,
+            canKill: canKillSessions(permissions),
+        };
+        this.state = { ...this.state, sessionCapabilities: capabilities };
     }
 
     /**
@@ -171,6 +308,15 @@ export class AdminPanelController extends WebviewPanelController<
                 ? { status: "error", errorMessage: result.errorMessage }
                 : { status: "loaded", data: result.data, readAt: new Date().toISOString() },
         );
+
+        // El botón de terminar sesión tiene que salir ya habilitado o deshabilitado, con su motivo,
+        // sin esperar a que alguien lo pulse.
+        if (section === AdminSection.Sessions) {
+            const permissions = await this.sessionAdmin.loadPermissions();
+            if (!this.isDisposed && permissions.permissions) {
+                this.publishCapabilities(permissions.permissions);
+            }
+        }
     }
 
     /** Despacha la lectura a la consulta que corresponde. */

@@ -110,4 +110,47 @@ export interface ActiveSession {
     cpuTimeMs: number;
     logicalReads: number;
     openTransactionCount: number;
+    /**
+     * Momento en que empezó la **más antigua** de sus transacciones abiertas, en ISO 8601. Vacío
+     * cuando no tiene ninguna.
+     *
+     * Una sesión puede tener varias transacciones abiertas a la vez (anidadas o en varias bases),
+     * y la que bloquea a los demás es siempre la que lleva más tiempo abierta.
+     */
+    oldestTransactionStart: string;
+    /** Segundos que lleva abierta esa transacción. 0 cuando no hay ninguna. */
+    longestOpenTransactionSeconds: number;
+}
+
+/**
+ * Permisos de la conexión actual para terminar sesiones ajenas.
+ *
+ * `KILL` exige `ALTER ANY CONNECTION`, que traen los roles fijos `sysadmin` y `processadmin`. Se
+ * leen los tres por separado para poder decir **por qué** se puede o no se puede, en lugar de un
+ * «no tienes permiso» a secas.
+ */
+export interface KillPermissions {
+    /** `@@SPID` de la conexión del panel: nunca se puede terminar a sí misma. */
+    currentSessionId: number;
+    loginName: string;
+    isSysadmin: boolean;
+    isProcessAdmin: boolean;
+    hasAlterAnyConnection: boolean;
+}
+
+/**
+ * Identidad de una sesión, para comprobar justo antes de terminarla que sigue siendo la misma.
+ *
+ * **SQL Server reutiliza los identificadores de sesión de inmediato.** Comprobado: al terminar la
+ * sesión 54, la conexión siguiente del propio sondeo recibió el 54. Si el panel lleva un rato
+ * abierto, el número de la fila puede pertenecer ya a otra conexión, así que antes de ejecutar
+ * `KILL` se vuelve a leer la sesión y se compara su identidad con la que el usuario confirmó.
+ */
+export interface SessionSnapshot {
+    sessionId: number;
+    loginName: string;
+    hostName: string;
+    programName: string;
+    /** Momento de inicio de sesión, en ISO 8601. Es lo que mejor distingue una reutilización. */
+    loginTime: string;
 }

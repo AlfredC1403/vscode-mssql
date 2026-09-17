@@ -413,7 +413,38 @@ suite("Fork: mapeo de sesiones activas", () => {
         "cpu_time",
         "logical_reads",
         "open_transaction_count",
+        "oldest_transaction_start",
+        "longest_open_transaction_seconds",
     ];
+
+    /** Fila de sesión sin transacción abierta, para los casos que no hablan de eso. */
+    function sessionRow(
+        sessionId: string,
+        login: string,
+        host: string,
+        program: string,
+        status: string,
+        database: string,
+        isCurrent: string,
+    ): (string | null)[] {
+        return [
+            sessionId,
+            login,
+            host,
+            program,
+            status,
+            database,
+            "",
+            "",
+            "",
+            isCurrent,
+            "0",
+            "0",
+            "0",
+            null,
+            "0",
+        ];
+    }
 
     test("mapea la sesión y recorta el texto de la sentencia", () => {
         const sessions = result(SESSION_COLUMNS, [
@@ -431,6 +462,8 @@ suite("Fork: mapeo de sesiones activas", () => {
                 "79",
                 "2941",
                 "0",
+                null,
+                "0",
             ],
         ]);
 
@@ -446,9 +479,49 @@ suite("Fork: mapeo de sesiones activas", () => {
         expect(session.lastStatement).to.equal("SELECT 1");
     });
 
+    test("trae el tiempo de la transacción abierta más antigua", () => {
+        const sessions = result(SESSION_COLUMNS, [
+            [
+                "70",
+                "app_user",
+                "WS-14",
+                "SQLWorks",
+                "sleeping",
+                "Ventas",
+                "2026-09-17T21:40:11",
+                "2026-09-17T21:41:00",
+                "UPDATE ventas.Cliente SET nombre = 'x'",
+                "0",
+                "0",
+                "0",
+                "2",
+                "2026-09-17T21:40:30.927",
+                "95",
+            ],
+        ]);
+
+        const [session] = mapActiveSessions(sessions);
+
+        // Dos transacciones abiertas, y lo que interesa es desde cuándo lleva abierta la más vieja.
+        expect(session.openTransactionCount).to.equal(2);
+        expect(session.oldestTransactionStart).to.equal("2026-09-17T21:40:30.927");
+        expect(session.longestOpenTransactionSeconds).to.equal(95);
+    });
+
+    test("sin transacción abierta, el tiempo es cero y no hay momento de inicio", () => {
+        const sessions = result(SESSION_COLUMNS, [
+            sessionRow("53", "sa", "vm", "SQLWorks", "running", "ParityDb", "0"),
+        ]);
+
+        const [session] = mapActiveSessions(sessions);
+
+        expect(session.oldestTransactionStart).to.equal("");
+        expect(session.longestOpenTransactionSeconds).to.equal(0);
+    });
+
     test("detecta que solo se ve la sesión propia, el síntoma de no tener VIEW SERVER STATE", () => {
         const onlyMine = result(SESSION_COLUMNS, [
-            ["53", "ana", "vm", "SQLWorks", "running", "ParityDb", "", "", "", "1", "0", "0", "0"],
+            sessionRow("53", "ana", "vm", "SQLWorks", "running", "ParityDb", "1"),
         ]);
 
         expect(looksLikeMissingViewServerState(mapActiveSessions(onlyMine))).to.equal(true);
@@ -456,8 +529,8 @@ suite("Fork: mapeo de sesiones activas", () => {
 
     test("con más de una sesión, no se avisa de nada", () => {
         const several = result(SESSION_COLUMNS, [
-            ["53", "ana", "vm", "SQLWorks", "running", "ParityDb", "", "", "", "1", "0", "0", "0"],
-            ["51", "beto", "pc", "SSMS", "sleeping", "master", "", "", "", "0", "0", "0", "0"],
+            sessionRow("53", "ana", "vm", "SQLWorks", "running", "ParityDb", "1"),
+            sessionRow("51", "beto", "pc", "SSMS", "sleeping", "master", "0"),
         ]);
 
         expect(looksLikeMissingViewServerState(mapActiveSessions(several))).to.equal(false);
@@ -465,7 +538,7 @@ suite("Fork: mapeo de sesiones activas", () => {
 
     test("una sola sesión que no es la propia tampoco dispara el aviso", () => {
         const other = result(SESSION_COLUMNS, [
-            ["51", "beto", "pc", "SSMS", "sleeping", "master", "", "", "", "0", "0", "0", "0"],
+            sessionRow("51", "beto", "pc", "SSMS", "sleeping", "master", "0"),
         ]);
 
         expect(looksLikeMissingViewServerState(mapActiveSessions(other))).to.equal(false);

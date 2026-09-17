@@ -171,13 +171,30 @@ export const WebviewStrings = {
             cpu: "CPU",
             reads: "Lecturas",
             transactions: "Trans.",
+            openTransactionAge: "Transacción abierta",
             lastRequest: "Última petición",
             lastStatement: "Última sentencia",
+            actions: "Acción",
         },
         currentSession: "Esta sesión",
         noStatement: "Sin sentencia registrada",
         missingViewServerState:
             "Solo se ve esta sesión. SQL Server oculta las demás cuando el login no tiene el permiso VIEW SERVER STATE, sin dar error.",
-        legend: "CPU en milisegundos. Lecturas en páginas lógicas.",
+        legend: "Ordenado por transacción abierta más antigua. CPU en milisegundos.",
+        /** Antigüedad de la transacción más vieja de la sesión, con su explicación. */
+        openTransactionTooltip: (since: string) => `Abierta desde ${since}`,
+        noOpenTransaction: "—",
+        kill: "Terminar",
+        killAria: (sessionId: number) => `Terminar la sesión ${sessionId}`,
+        /** Por qué el botón está deshabilitado. Sale en el tooltip, no en un aviso aparte. */
+        killDisabledOwn: "No se puede terminar la sesión que usa este panel.",
+        killDisabledPermission:
+            "Hace falta ALTER ANY CONNECTION, o pertenecer a sysadmin o processadmin, para terminar sesiones.",
+        killDisabledUnknown: "Todavía no se sabe si esta conexión puede terminar sesiones.",
+        /** De dónde sale el permiso, para que se vea con qué autoridad se actúa. */
+        killAllowedBySysadmin: "Permitido: eres sysadmin.",
+        killAllowedByProcessAdmin: "Permitido: eres processadmin.",
+        killAllowedByPermission: "Permitido: tienes ALTER ANY CONNECTION.",
+        killWarning: "Pide confirmación y muestra la sentencia antes de ejecutar nada.",
     },
 } as const;

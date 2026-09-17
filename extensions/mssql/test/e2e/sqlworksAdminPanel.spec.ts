@@ -20,7 +20,9 @@ import { getPassword, getServerName, getUserName } from "./utils/envConfigReader
  *
  * - **M2**: el panel de administración abre desde el explorador de objetos y sabe a qué servidor y
  *   base de datos apunta, reutilizando la conexión activa de la extensión.
- * - **M3**: sus cinco secciones de seguridad del servidor leen datos reales de la instancia.
+ * - **M3**: sus cinco secciones de seguridad del servidor leen datos reales de la instancia, y el
+ *   botón de terminar sesión pide confirmación mostrando la sentencia. El test **cancela**: no
+ *   termina ninguna sesión. Ver FORK.md §20.6.
  *
  * Requiere `test/e2e/.env` apuntando a una instancia alcanzable, igual que el resto de la suite.
  * FORK.md §13.1 explica cómo levantar una con Docker.
@@ -41,6 +43,10 @@ test.setTimeout(900_000);
  */
 const INITIAL_CONFIG = {
     ...DEFAULT_USER_CONFIG,
+    // Los diálogos modales de VS Code son ventanas nativas del sistema salvo con esta opción, y una
+    // ventana nativa no está en el DOM, así que Playwright no puede leerla. Con «custom» el diálogo
+    // se pinta dentro del workbench y el test puede comprobar que muestra la sentencia.
+    "window.dialogStyle": "custom",
     "mssql.connections": [
         {
             profileName: PROFILE_NAME,
@@ -197,6 +203,33 @@ test.describe("SQLWorks - Panel de administración", () => {
         // La propia sesión del panel tiene que aparecer marcada.
         await expect(panel.getByText("Esta sesión").first()).toBeVisible({ timeout: 60_000 });
         await expect(panel.getByRole("gridcell", { name: /ParityDb/ }).first()).toBeVisible();
+        // Columna del tiempo que lleva abierta la transacción más antigua de cada sesión.
+        await expect(
+            panel.getByRole("columnheader", { name: "Transacción abierta" }),
+        ).toBeVisible();
+
+        // El botón de terminar: deshabilitado en la sesión del propio panel, y habilitado en las
+        // demás porque el perfil e2e conecta como sa, que es sysadmin.
+        const ownRow = panel.getByRole("row").filter({ hasText: "Esta sesión" }).first();
+        await expect(ownRow.getByRole("button", { name: /Terminar la sesión/ })).toBeDisabled();
+
+        const otherKillButtons = panel
+            .getByRole("row")
+            .filter({ hasNot: panel.getByText("Esta sesión") })
+            .getByRole("button", { name: /Terminar la sesión/ });
+        const enabledKill = otherKillButtons.first();
+        await expect(enabledKill).toBeEnabled();
+
+        // La confirmación tiene que mostrar la sentencia exacta antes de ejecutar nada (§11.1 del
+        // brief). Se cancela: este test no termina ninguna sesión.
+        await enabledKill.click();
+        const dialog = page.locator(".monaco-dialog-box");
+        await expect(dialog).toBeVisible({ timeout: 30_000 });
+        await expect(dialog).toContainText(/¿Terminar la sesión \d+\?/);
+        await expect(dialog).toContainText(/KILL \d+;/);
+        await expect(dialog).toContainText("irreversible");
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
 
         // --- El buscador de la rejilla filtra ---
         await openTab("Logins");
