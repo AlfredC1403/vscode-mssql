@@ -14,6 +14,10 @@ export const WebviewStrings = {
         subtitleEmpty: "Sin conexión resuelta",
         refresh: "Actualizar",
         refreshAriaLabel: "Volver a leer los datos de la conexión",
+        sections: {
+            connection: "Conexión",
+            instance: "Instancia",
+        },
         fields: {
             server: "Servidor",
             database: "Base de datos",
@@ -29,9 +33,9 @@ export const WebviewStrings = {
             onPremises: "Local",
         },
         readAt: (moment: string) => `Leído a las ${moment}`,
-        placeholderTitle: "Panel vacío, a propósito",
+        placeholderTitle: "Panel vacío, a propósito. ",
         placeholderBody:
-            "Este panel es el punto de anclaje del fork (hito M2). Ya abre desde el explorador de objetos, reutiliza la conexión activa de la extensión y toma sus colores del tema. El contenido de administración llega en los hitos siguientes.",
+            "Es el punto de anclaje del fork (hito M2): ya abre desde el explorador de objetos, reutiliza la conexión activa y toma sus colores del tema. El contenido de administración llega en los hitos siguientes:",
         placeholderNext: [
             "M3 — Seguridad del servidor en solo lectura: logins, roles, permisos, propiedades de la instancia y sesiones activas.",
             "M4 — Usuarios y permisos en solo lectura, con la matriz de heredados.",

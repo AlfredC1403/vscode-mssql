@@ -1072,3 +1072,133 @@ cerrar el diálogo y usar el árbol.
 explorador por listo. Ese nodo solo existe cuando no hay ningún perfil, así que precargar uno
 rompía el arranque de **toda** la suite. Cambiado por esperar a que el árbol de conexiones tenga
 cualquier elemento, que es lo que de verdad indica que ya está montado. Está en la tabla del §0.
+
+---
+
+## 18. El API Object Management del STS: sondeo antes de M3
+
+Pregunta que se planteó en M0 (§11.6): ¿soporta el SQL Tools Service los tipos de objeto de
+seguridad? Si los soporta, M5 puede pedirle a él el script en lugar de que generemos nuestro
+propio DDL. **Verificado contra SQL Server 2022 real**, con un arnés JSON-RPC.
+
+### 18.1. Tipos soportados
+
+`objectManagement/initializeView` con `isNewObject: true`:
+
+| `objectType`            | Soportado | Campos que devuelve                                                                                                                                                                                                                                                                                    |
+| ----------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ServerLevelLogin`      | ✅        | `name`, `authenticationType`, `isEnabled`, `isLockedOut`, `mustChangePassword`, `enforcePasswordPolicy`, `enforcePasswordExpiration`, `password`, `oldPassword`, `defaultDatabase`, `defaultLanguage`, `connectPermission`, `windowsGrantAccess`, `serverRoles`, `userMapping`, `securablePermissions` |
+| `ServerLevelServerRole` | ✅        | `name`, `owner`, `members`, `memberships`, `securablePermissions`                                                                                                                                                                                                                                      |
+| `User`                  | ✅        | `name`, `type`, `loginName`, `password`, `defaultSchema`, `ownedSchemas`, `databaseRoles`, `defaultLanguage`, `securablePermissions`                                                                                                                                                                   |
+| `DatabaseRole`          | ✅        | `name`, `owner`, `ownedSchemas`, `members`, `extendedProperties`, `securablePermissions`                                                                                                                                                                                                               |
+| `ApplicationRole`       | ✅        | `name`, `defaultSchema`, `password`, `ownedSchemas`, `securablePermissions`                                                                                                                                                                                                                            |
+| `Database`              | ✅        | `owner`, `collationName`, `recoveryModel`, `compatibilityLevel`, `containmentType`, `sizeInMb`, `spaceAvailableInMb`, `status`, `numberOfUsers`, `dateCreated`, `lastDatabaseBackup`, y más                                                                                                            |
+| `ServerRole`            | ✅        | igual que `ServerLevelServerRole`, es un alias                                                                                                                                                                                                                                                         |
+| `ServerLevelCredential` | ❌        | error de parseo en el propio STS                                                                                                                                                                                                                                                                       |
+| `Table`                 | ❌        | «This operation is not supported for this object type»                                                                                                                                                                                                                                                 |
+| `Login`                 | ❌        | no es un nombre válido: hay que usar `ServerLevelLogin`                                                                                                                                                                                                                                                |
+
+Esto cubre **todo lo que piden los §8.1, §8.2, §8.3 y §9 del brief**, salvo esquemas, sesiones
+activas y propiedades de la instancia.
+
+### 18.2. Leer objetos existentes: el URN sale del explorador
+
+Los nodos del explorador de objetos traen su URN de SMO en `metadata.urn`:
+
+```json
+{
+    "nodePath": "localhost,1433/Security/Logins/parity_user",
+    "nodeType": "ServerLevelLogin",
+    "metadata": {
+        "metadataTypeName": "Login",
+        "name": "parity_user",
+        "urn": "Server[@Name='a41e603be4a3']/Login[@Name='parity_user']"
+    }
+}
+```
+
+Ese valor es el `objectUrn` de `initializeView` con `isNewObject: false`. Encadenando
+**nodo del árbol → URN → objeto completo** se lee un login o un usuario existente sin escribir
+una línea de T-SQL. Comprobado con `parity_user`: devolvió `isEnabled: true`,
+`enforcePasswordPolicy: true`, `defaultDatabase: "master"`, `serverRoles: ["dbcreator","public"]`,
+y el usuario de base con `type: "LoginMapped"`, `defaultSchema: "ventas"`,
+`databaseRoles: ["ventas_lectores"]`.
+
+**La contraseña viene enmascarada** (`"***************"`), así que la regla 11.3 del brief la
+cumple el propio STS.
+
+### 18.3. `objectManagement/script` devuelve DDL sin ejecutar
+
+```
+USE [master] GO CREATE LOGIN [sqlworks_probe] WITH PASSWORD=N'' MUST_CHANGE, DEFAULT_DATABASE=[master], …
+USE [ParityDb] GO CREATE USER [sqlworks_probe] GO
+USE [master] GO CREATE SERVER ROLE [sqlworks_probe] GO
+USE [ParityDb] GO CREATE ROLE [sqlworks_probe] GO
+```
+
+Es exactamente la regla 11.1 del brief («nunca ejecutes DDL sin mostrar antes el script»),
+implementada por el upstream. Y como el DDL lo genera SMO, los identificadores vienen ya
+entrecomillados: desaparece el riesgo de inyección por identificador en la ruta de edición.
+
+### 18.4. Forma de `securablePermissions`
+
+```json
+[
+    {
+        "name": "Cliente",
+        "schema": "ventas",
+        "type": "Table",
+        "effectivePermissions": [],
+        "permissions": [
+            { "permission": "Select", "grantor": "dbo", "grant": null, "withGrant": null },
+            { "permission": "Insert", "grantor": "", "grant": null, "withGrant": null }
+        ]
+    }
+]
+```
+
+Un elemento por securable, con sus permisos y `grant` en tres estados (`true`, `false`, `null`).
+Encaja bien con el `PermissionMatrix` del §9 del brief.
+
+**Aviso, y hay que verificarlo en M4:** en la prueba, `parity_user` tiene `SELECT` sobre el
+esquema `ventas` **heredado del rol** `ventas_lectores`, y `effectivePermissions` volvió **vacío**
+para la tabla. Si ese campo no resuelve la herencia, el estado «heredado de rol» de la matriz hay
+que calcularlo nosotros combinando permisos explícitos y pertenencia a roles, como ya prevé el
+§10 del brief. No se da por bueno hasta comprobarlo.
+
+### 18.5. Lo que el API **no** da, y sigue necesitando T-SQL propio
+
+1. **Listados.** `initializeView` es un objeto por llamada. Para una rejilla de 200 logins serían
+   200 idas y vueltas. Las consultas del §10 del brief traen la tabla entera en un viaje, con
+   exactamente las columnas que muestra el panel.
+2. **Sesiones activas** (§8.5) y **propiedades de la instancia** (§8.4): collation, modo de
+   autenticación, rutas de datos y log, memoria configurada, fecha de arranque. No son tipos de
+   objeto.
+3. **Esquemas con su propietario** (§8.3.3).
+4. **Matriz de permisos agregada** por principal y acción: `securablePermissions` viene por
+   objeto, no en forma de matriz.
+
+### 18.6. Plan que sale de esto
+
+**Híbrido, y reduce M5 de forma importante:**
+
+| Para                                           | Se usa                                                    |
+| ---------------------------------------------- | --------------------------------------------------------- |
+| Listados y rejillas de solo lectura (M3, M4)   | Nuestro T-SQL del §10, en `src/custom/admin/sql/queries/` |
+| Sesiones, propiedades de instancia, esquemas   | Ídem                                                      |
+| Detalle de un objeto (M3, M4)                  | `objectManagement/initializeView` con el URN del árbol    |
+| **Crear, modificar y generar script** (M5, M6) | `objectManagement/script` + `/save`                       |
+
+Lo que esto **ahorra**: escribir y probar generadores de DDL para `CREATE`/`ALTER` de login,
+usuario, roles y sus pertenencias. El §9 del brief los pedía como funciones puras con tests; con
+el API dejan de hacer falta para esos casos.
+
+Lo que **sigue en pie**:
+
+- `src/custom/util/identifiers.ts` con su validación y sus tests (§11.2). Hace falta para el
+  T-SQL que sí escribimos, y para validar nombres antes de mandarlos al API.
+- La transacción explícita con `SET XACT_ABORT ON` y el rollback (§11.6) para **nuestros** lotes:
+  `GRANT`/`DENY`/`REVOKE`, `DROP LOGIN`, `DROP USER`, `DROP DATABASE`. `objectManagement/save`
+  ejecuta a su manera y no lo controlamos.
+- Las confirmaciones escribiendo el nombre del objeto (§11.5) y el aviso de producción (§11.4).
+- Mostrar el script antes de ejecutar, venga del API o de nosotros.

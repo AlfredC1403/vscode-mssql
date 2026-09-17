@@ -13,9 +13,8 @@ import { makeStyles, Text } from "@fluentui/react-components";
  * - Al pie, un cajón fijo que aparece **solo** cuando hay algo que mostrar. En M2 nunca aparece;
  *   desde M5 llevará el script generado con su insignia de cambios pendientes.
  *
- * Densidad de escritorio, no de web móvil: filas de 44 px, botones de 30 px, texto base de 13 px
- * y secundario de 11 px. Todos los colores salen de variables `--vscode-*` del tema activo, así
- * que el panel sigue al tema sin paleta propia.
+ * Todos los colores salen de variables `--vscode-*` del tema activo, así que el panel sigue al
+ * tema sin paleta propia. Botones de 30 px, texto base de 13 px y secundario de 11 px.
  */
 const useStyles = makeStyles({
     root: {
@@ -31,36 +30,38 @@ const useStyles = makeStyles({
     },
     header: {
         display: "flex",
-        alignItems: "flex-start",
+        alignItems: "center",
         justifyContent: "space-between",
         gap: "16px",
-        padding: "12px 16px",
+        // Compacta: la cabecera orienta, no protagoniza.
+        padding: "10px 16px",
         borderBottom: "1px solid var(--vscode-panel-border, var(--vscode-editorWidget-border))",
+        backgroundColor: "var(--vscode-editorWidget-background, var(--vscode-editor-background))",
         flexShrink: 0,
     },
     headerText: {
         display: "flex",
         flexDirection: "column",
-        gap: "2px",
+        gap: "1px",
         minWidth: 0,
     },
     title: {
-        fontSize: "15px",
+        fontSize: "14px",
         fontWeight: 600,
         color: "var(--vscode-foreground)",
-        lineHeight: "20px",
+        lineHeight: "18px",
     },
     context: {
         display: "flex",
         flexWrap: "wrap",
-        gap: "4px 10px",
+        alignItems: "center",
+        gap: "0 8px",
         fontSize: "11px",
         color: "var(--vscode-descriptionForeground)",
-        lineHeight: "16px",
+        lineHeight: "15px",
     },
     contextSeparator: {
-        color: "var(--vscode-descriptionForeground)",
-        opacity: 0.5,
+        opacity: 0.45,
     },
     actions: {
         display: "flex",
@@ -73,6 +74,10 @@ const useStyles = makeStyles({
         overflowY: "auto",
         padding: "16px",
         minHeight: 0,
+        display: "flex",
+        flexDirection: "column",
+        gap: "16px",
+        alignItems: "flex-start",
     },
     drawer: {
         flexShrink: 0,
