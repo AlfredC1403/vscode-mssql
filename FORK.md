@@ -471,7 +471,26 @@ Buena noticia para cuando llegue el momento.
 
 ---
 
-## 11. Decisiones que hay que tomar antes de seguir
+## 11. Decisiones
+
+**Decisiones tomadas por el usuario el 2026-09-17:**
+
+| #    | Asunto                            | Decisión                                                                                                                     |
+| ---- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 11.4 | Empaquetado del SQL Tools Service | **Aprobada la recomendación: modo `--offline`** (STS autocontenido dentro del `.vsix`)                                       |
+| 11.5 | Replanteo de M8 (formateador)     | **Aprobada la recomendación: conservar el formateador del upstream y construir solo lo que falta.** No entra `sql-formatter` |
+
+Consecuencias de 11.5 sobre el brief, que quedan formalmente derogadas:
+
+- §13.1 («sustituye el proveedor de formato del upstream») — no se hace: no hay registro que
+  sustituir y el del upstream es mejor.
+- §13 «Cómo implementarlo sin escribir un parser» (usar `sql-formatter`) — se sustituye por el
+  mapeo perfil XML ↔ `mssql.format.options.*`.
+- El anclaje nº 3 del brief (registro del proveedor de formato) desaparece de la lista.
+
+Lo que M8 sigue entregando, sin cambios: el perfil XML, los perfiles múltiples con selector, el
+panel de opciones con vista previa lado a lado, la importación desde los ajustes actuales, un
+test por opción, y las opciones no soportadas deshabilitadas en la interfaz con su mensaje.
 
 ### 11.1. Punto de anclaje que el brief no previó
 
@@ -575,34 +594,89 @@ la migración de la rejilla a `FluentResultGrid`. Tres meses entre merges puede 
 
 Se corre después del fork inicial y después de cada merge.
 
-| #   | Comprobación                                                          | Estado                     |
-| --- | --------------------------------------------------------------------- | -------------------------- |
-| 1   | Conectar con autenticación SQL y con autenticación integrada          | ⏳ requiere instancia real |
-| 2   | Explorador: servidor, base, tablas, vistas, procedimientos, seguridad | ⏳ requiere instancia real |
-| 3   | IntelliSense sugiere tablas y columnas reales                         | ⏳ requiere instancia real |
-| 4   | Ejecutar consulta: resultados, mensajes, varios conjuntos             | ⏳ requiere instancia real |
-| 5   | Exportar a CSV y a JSON                                               | ⏳ requiere instancia real |
-| 6   | Script as Create sobre tabla y sobre procedimiento                    | ⏳ requiere instancia real |
-| 7   | Plan de ejecución estimado                                            | ⏳ requiere instancia real |
-| 8   | Historial de consultas                                                | ⏳ requiere instancia real |
+### 13.1. Cómo se reproduce
 
-Lo que sí se ha verificado en este entorno:
+El entorno de verificación se monta entero con Docker, sin depender de ninguna instancia externa:
 
-| Comprobación                                     | Resultado                                           |
-| ------------------------------------------------ | --------------------------------------------------- |
-| `npm install` en la raíz                         | ✅                                                  |
-| `npm run build -- --target mssql`                | ✅ (con Node 24; falla con Node 22)                 |
-| `dist/extension.js` generado                     | ✅                                                  |
-| `dist/views/` con los 28 entry points de webview | ✅                                                  |
-| `npm test -- --target mssql`                     | ✅ 5103 pasan, 0 fallan, 17 omitidos (289 archivos) |
-| Remoto `upstream` configurado y accesible        | ✅                                                  |
+```bash
+docker run -d --name mssql-parity \
+  -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='<contraseña>' -e MSSQL_PID=Developer \
+  -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
+```
+
+La base de prueba (`ParityDb`) lleva dos tablas con clave ajena e índice, una vista, un
+procedimiento, un esquema propio (`ventas`), un login y usuario `parity_user`, un rol
+`ventas_lectores` con `GRANT SELECT` de esquema, y un **`DENY` a nivel de columna** —
+el escenario que M4 necesita para probar la matriz de permisos.
+
+Dos arneses distintos:
+
+1. **La suite e2e del upstream** (`npx playwright test`, VS Code real bajo `xvfb`), que cubre
+   la interfaz. Requiere `extensions/mssql/test/e2e/.env` (está en `.gitignore`, así que la
+   contraseña no entra al repositorio).
+2. **Un arnés JSON-RPC contra el STS** para lo que la suite del upstream no cubre. Habla
+   directamente con `sqltoolsservice/<versión>/Linux/MicrosoftSqlToolsServiceLayer` usando los
+   mismos contratos que la extensión. Verifica el motor sin depender de la interfaz.
+
+### 13.2. Resultado sobre el fork sin modificar (commit `752692d`)
+
+| #   | Comprobación                                                          | Estado | Evidencia                                                                                 |
+| --- | --------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
+| 1   | Conectar con autenticación SQL                                        | ✅     | e2e `connection.spec.ts` + arnés: SQL Server 16.0.4295.3, Developer Edition               |
+| 1b  | Conectar con autenticación integrada                                  | ❌     | **No verificable aquí**: requiere Windows y un dominio Kerberos                           |
+| 2   | Explorador: servidor, base, tablas, vistas, procedimientos, seguridad | ✅     | arnés: árbol completo expandido, incluidas columnas con tipo y PK                         |
+| 3   | IntelliSense sugiere tablas y columnas reales                         | ✅     | arnés: `ventas.` → `Cliente`, `Pedido`, `vPedidoCliente`                                  |
+| 4   | Ejecutar consulta: resultados, mensajes, varios conjuntos             | ✅     | arnés: 2 conjuntos + 3 mensajes (`PRINT` y los dos «rows affected»)                       |
+| 5   | Exportar a CSV y a JSON                                               | ✅     | arnés: `query/saveCsv` y `query/saveJson`, contenido comprobado                           |
+| 6   | Script as Create sobre tabla y sobre procedimiento                    | ✅     | arnés: `CREATE TABLE [ventas].[Cliente]` y `CREATE PROCEDURE [ventas].[ObtenerPedidos]`   |
+| 7   | Plan de ejecución estimado                                            | ✅     | e2e `executionPlan.spec.ts`: 12 tests (zoom, tooltips, propiedades, XML, buscar nodo)     |
+| 8   | Historial de consultas                                                | ⚠️     | `queryHistoryProvider.test.js`: 10 tests unitarios en verde. Sin comprobación de interfaz |
+
+**Siete de los ocho puntos verificados contra una instancia real.** Los dos huecos:
+
+- **Autenticación integrada** es un hueco estructural de este entorno, no un fallo del fork.
+  Solo se puede comprobar en la máquina del usuario, que es además donde se usa.
+- **Historial de consultas** tiene cobertura unitaria del upstream pero es una vista de
+  `TreeDataProvider` que no pasa por el STS, así que el arnés no la alcanza.
+
+### 13.3. Toolchain
+
+| Comprobación                                     | Resultado                                                 |
+| ------------------------------------------------ | --------------------------------------------------------- |
+| `npm install` en la raíz                         | ✅                                                        |
+| `npm run build -- --target mssql`                | ✅ (con Node 24; falla con Node 22)                       |
+| `dist/extension.js` generado                     | ✅                                                        |
+| `dist/views/` con los 28 entry points de webview | ✅                                                        |
+| `npm test -- --target mssql`                     | ✅ 5103 pasan, 0 fallan, 17 omitidos (289 archivos)       |
+| Suite e2e del upstream                           | ✅ 15 pasan, 2 omitidos (tras aislar el defecto de §13.4) |
+| Remoto `upstream` configurado y accesible        | ✅                                                        |
 
 La salida de los tests confirma además el hallazgo de §6: _«No telemetry connection string
 found; telemetry will not be sent»_.
 
-Los ocho puntos de paridad **no se pueden verificar desde este contenedor**: no hay instancia de
-SQL Server accesible ni una sesión de VS Code con interfaz. Hay que correrlos en la máquina del
-usuario con F5.
+### 13.4. Defecto del upstream encontrado al correr la paridad
+
+`test/e2e/utils/testHelpers.ts:37` busca el campo «Database name» del diálogo de conexión como
+`getByRole("textbox", …)`, pero ese campo es un **combobox** desde que
+`src/connectionconfig/formComponentHelpers.ts:299` lo declara `FormItemType.Combobox` con
+`freeform: true`. La suite falla siempre que `DATABASE_NAME` está puesto en el `.env`.
+
+Hay una segunda causa encadenada: el combobox intenta poblar la lista de bases antes de que el
+helper marque «Trust server certificate», y con `Encrypt=Mandatory` y certificado autofirmado
+falla con _«Unable to load database list from server»_.
+
+Comprobado que es el test y no el producto: con `DATABASE_NAME` vacío las dos especificaciones
+pasan, y el errorlog del servidor muestra la creación y el borrado reales de `TestDB`.
+
+**No lo arreglamos**: es código de test del upstream, y tocarlo es deuda de merge para un
+defecto que no nos afecta. Queda anotado aquí para no volver a diagnosticarlo, y para reportarlo
+al upstream si interesa. Consecuencia práctica: **nuestro `.env` de paridad deja
+`DATABASE_NAME` vacío.**
+
+Aviso adicional: `connection.spec.ts` y `queryExecution.spec.ts` tienen aserciones débiles
+(`connection.spec` no comprueba que la conexión se creara; `queryExecution` busca el texto
+`Doe`, que también está en el propio editor). Pasan aunque no se conecte. No te fíes de su
+verde: mira el errorlog del servidor, como se hizo aquí.
 
 ---
 
