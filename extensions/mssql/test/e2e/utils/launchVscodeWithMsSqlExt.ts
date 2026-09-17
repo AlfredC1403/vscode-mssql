@@ -182,10 +182,14 @@ export async function launchVsCodeWithMssqlExtension(
         .first()
         .waitFor({ state: "hidden", timeout: 30_000 });
 
-    await page.locator('[role="treeitem"][aria-label*="Add Connection"]').waitFor({
-        state: "visible",
-        timeout: 30_000,
-    });
+    // [FORK] El upstream esperaba el nodo "Add Connection", que solo existe cuando el árbol está
+    // vacío. Los tests del fork precargan perfiles en settings.json (ver FORK.md §17.3), y
+    // entonces ese nodo no aparece. Basta con esperar a que el árbol de conexiones tenga algo,
+    // que es lo que de verdad indica que el explorador ya está montado.
+    await page
+        .locator('[role="tree"][aria-label="Connections"] [role="treeitem"]')
+        .first()
+        .waitFor({ state: "visible", timeout: 30_000 });
 
     return { electronApp, page, userDataDir, extensionsDir, videoDir };
 }

@@ -20,5 +20,14 @@
         "composite": false,
         "allowSyntheticDefaultImports": true
     },
-    "include": ["src/webviews", "typings", "src/sharedInterfaces", "media"]
+    // [FORK] src/custom/webviews y src/custom/sharedInterfaces son el equivalente del fork a
+    // src/webviews y src/sharedInterfaces del upstream. Ver FORK.md §16.
+    "include": [
+        "src/webviews",
+        "typings",
+        "src/sharedInterfaces",
+        "media",
+        "src/custom/webviews",
+        "src/custom/sharedInterfaces"
+    ]
 }

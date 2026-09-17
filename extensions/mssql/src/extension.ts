@@ -18,6 +18,8 @@ import {
 } from "extension-toolkit/vscode";
 // [FORK] Telemetría desactivada por completo. Ver src/custom/overrides/telemetry.ts
 import { disableTelemetry } from "./custom/overrides/telemetry";
+// [FORK] Registro único de todo lo que añade el fork. Ver src/custom/index.ts
+import { registerCustom } from "./custom";
 import MainController from "./controllers/mainController";
 import { IExtension } from "vscode-mssql";
 import SqlToolsServerClient from "./languageservice/serviceclient";
@@ -197,6 +199,9 @@ class MssqlActivation {
                 ProjectProviderRegistry.registerProvider(provider, sqlDatabaseProjectsExtensionId),
             );
         }
+
+        // [FORK] Punto de anclaje único del fork. Ver src/custom/index.ts
+        registerCustom(context, controller.connectionManager);
 
         registerPerfApi(context);
         Perf.setActivationState("activated");

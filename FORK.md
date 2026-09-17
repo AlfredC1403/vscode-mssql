@@ -44,6 +44,12 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo                                                                                                                                                                                                | Quedaban desactualizadas tras el cambio anterior                                                                                                               | M1   |
 | `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                       | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
 
+| `extensions/mssql/package.json` | **M2**: comando `sqlworks.openAdminPanel` y su entrada en `view/item/context` | Anclaje nº1 del brief: así el panel se lanza desde el árbol sin tocar el explorador de objetos | M2 |
+| `extensions/mssql/src/extension.ts` | **M2, 2 líneas más**: el `import` de `registerCustom` y su llamada | Anclaje nº2 del brief: registro único de todo lo que añade el fork | M2 |
+| `extensions/mssql/scripts/bundle-webviews.js` | **1 línea**: entry point `sqlworks` | Anclaje que el brief no previó (§11.1). Es un router, así que se queda en una línea para siempre | M2 |
+| `extensions/mssql/tsconfig.extension.json` | **1 línea**: excluye `src/custom/webviews` | Mismo reparto que el upstream hace con `src/webviews` | M2 |
+| `extensions/mssql/tsconfig.webviews.json` | **2 líneas**: incluye `src/custom/webviews` y `src/custom/sharedInterfaces` | Ídem | M2 |
+
 ### Archivos de test y de arnés e2e que el renombrado obligó a tocar
 
 Todos por la misma razón: fijaban el identificador de la extensión o el título del contenedor de
@@ -911,3 +917,158 @@ poder comprobarlo aquí, se extrajo su `sqltoolsservice/` y se corrió el arnés
 binario, con `dotnet` ausente del sistema. Arrancó y los seis puntos pasaron, así que el
 `.vsix` offline es de verdad autocontenido. El paquete `linux-x64` se descartó después: el que se
 distribuye es `win-x64`.
+
+---
+
+## 16. Punto de anclaje (M2)
+
+### 16.1. Estructura real de `src/custom/`
+
+El brief propone una estructura que asume la extensión suelta. El repositorio separa el código del
+**host de extensión** del de los **webviews** con dos `tsconfig` distintos, así que la carpeta
+propia refleja ese mismo reparto:
+
+```
+extensions/mssql/src/custom/
+  index.ts                  registerCustom(): único punto de anclaje
+  strings.ts                textos del host, en español
+  sharedInterfaces/         tipos compartidos host ↔ webview (en AMBOS tsconfig)
+    customWebview.ts        discriminante de vista para el router
+    adminPanel.ts
+  admin/
+    panels/                 controladores del host
+      adminPanelController.ts
+    sql/                    (M3) todo el T-SQL, y solo aquí
+  util/
+    connectionTarget.ts     resuelve un nodo del árbol → servidor y base
+  overrides/                modificaciones a lo existente
+    telemetry.ts
+  webviews/                 TODO el React del fork (solo en tsconfig.webviews)
+    index.tsx               router de vistas
+    strings.ts              textos de los webviews
+    common/panelShell.tsx   estructura común de paneles (§14 del brief)
+    AdminPanel/
+  snippets/                 (M7)
+  format/                   (M8)
+```
+
+Dos desviaciones del brief, ambas forzadas por el reparto de `tsconfig`:
+
+1. **`webviews/` es una carpeta de primer nivel**, no una subcarpeta de cada función. Si cada
+   función metiera su React en su propio directorio, cada una necesitaría su línea en los dos
+   `tsconfig`. Con una sola raíz, el coste es de una vez.
+2. **`sharedInterfaces/`** existe porque los tipos que cruzan el puente host ↔ webview tienen que
+   compilar en los dos lados. No puede importar `vscode` ni nada del host.
+
+### 16.2. Un solo entry point de esbuild, con router
+
+`scripts/bundle-webviews.js` tiene una lista literal de entry points, y el brief no lo previó.
+En lugar de añadir una línea por panel, hay **una sola**:
+
+```js
+sqlworks: "src/custom/webviews/index.tsx",
+```
+
+Ese archivo es un router: lee el campo `view` del estado que le manda el host y elige el
+componente. Añadir un panel es añadir un `case`, no una línea en un archivo del upstream.
+
+Todos los controladores del fork pasan `"sqlworks"` como `sourceFile`, y `WebviewBaseController`
+construye el HTML como `sqlworks.js` + `sqlworks.css`.
+
+### 16.3. Textos en español, sin `l10n.t()`
+
+Los textos nuevos son constantes planas en `src/custom/strings.ts` (host) y
+`src/custom/webviews/strings.ts` (webviews), no `l10n.t()`.
+
+La regla de ESLint `custom-eslint-rules/no-direct-l10n` tiene una **lista blanca cerrada de dos
+archivos del upstream**, y ampliarla sería deuda de merge. Pero la razón de fondo es otra: la
+tubería de localización (`*.xlf`, `*.l10n.json`) la genera y la traduce Microsoft en su propia
+infraestructura, y nuestros textos no entran ahí. La interfaz nueva es solo en español por
+decisión del brief, así que envolverlos en `l10n.t()` no aportaría nada.
+
+Contrapartida honesta: si algún día hiciera falta un segundo idioma, hay que retrofitear. Los dos
+archivos de textos son el único punto a cambiar.
+
+### 16.4. El panel no abre su propia conexión
+
+`resolveConnectionTarget` reutiliza la conexión que la extensión ya tiene abierta y **no conecta
+por su cuenta** (regla 16.2 del brief). Si el perfil no está conectado, avisa y el usuario conecta
+desde el árbol como haría siempre. La URI de conexión que devuelve es la identidad con la que M3 y
+siguientes hablarán con el SQL Tools Service.
+
+Los datos del motor (versión, edición, nube) salen de `connectionManager.getServerInfo()`, que es
+lo que el motor informó al establecer la conexión: **cero T-SQL en M2**. El T-SQL llega en M3 y vive
+solo en `src/custom/admin/sql/`.
+
+### 16.5. Verificación de M2
+
+| Comprobación                                       | Resultado                                                                           |
+| -------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `npm run build -- --target mssql`                  | ✅ genera `dist/views/sqlworks.js` y `.css`                                         |
+| `npm run lint -- --target mssql`                   | ✅                                                                                  |
+| `npm test -- --target mssql`                       | ✅ **5119 pasan, 0 fallan** (290 archivos + 2 nuestros)                             |
+| Tests propios de M2                                | ✅ 8 de `resolveConnectionTarget` + 4 de `AdminPanelController`                     |
+| **Panel abriendo desde el explorador de objetos**  | ✅ `test/e2e/sqlworksAdminPanel.spec.ts`, contra SQL Server 2022 real               |
+| Panel mostrando servidor y base de datos correctos | ✅ en el mismo test: `localhost,1433` y `ParityDb`, más versión y edición del motor |
+
+El criterio de cierre del brief («terminado cuando el panel abre desde el explorador de objetos y
+sabe a qué servidor y base está apuntando») queda comprobado de punta a punta, no solo por
+unitarios.
+
+### 16.6. Cómo correr el test e2e del panel
+
+```bash
+# 1. Levanta la instancia y siembra la base (ver §13.1)
+# 2. Configura extensions/mssql/test/e2e/.env  (está en .gitignore)
+cd extensions/mssql
+SKIP_DOTNET_RUNTIME_EXTENSION_INSTALL=true npx playwright test sqlworksAdminPanel.spec.ts
+```
+
+El test **precarga el perfil de conexión en `settings.json`** en lugar de rellenar el diálogo, por
+la razón del §17.3. Es más rápido y no depende de la interfaz del diálogo.
+
+---
+
+## 17. Defectos del upstream encontrados
+
+Se anotan aquí para no volver a diagnosticarlos, y por si interesa reportarlos. **Ninguno se
+arregla**: son código del upstream y tocarlos es deuda de merge a cambio de nada para nosotros.
+
+### 17.1. El helper e2e busca el campo «Database name» como `textbox`
+
+`test/e2e/utils/testHelpers.ts:37` lo busca con `getByRole("textbox", …)`, pero
+`src/connectionconfig/formComponentHelpers.ts:299` lo declara `FormItemType.Combobox` con
+`freeform: true`. La suite falla siempre que `DATABASE_NAME` está puesto en el `.env`.
+
+Ver §13.4 para el diagnóstico completo.
+
+### 17.2. Aserciones débiles en dos especificaciones e2e
+
+`connection.spec.ts` no comprueba que la conexión se creara, y `queryExecution.spec.ts` busca el
+texto `Doe`, que también está en el propio editor. **Pasan aunque no se conecte nada.** No te fíes
+de su verde: mira el errorlog del servidor.
+
+### 17.3. El diálogo de conexión se cuelga tras un primer intento fallido por certificado
+
+Con un certificado autofirmado y `Encrypt=Mandatory`, el primer intento falla con
+_«error occurred during the pre-login handshake (provider: TCP Provider, error: 35)»_. La
+extensión reintenta y **la conexión se establece**: el log muestra
+`Connected to server … Server information: {…}` con la versión y la edición del motor.
+
+Pero el botón del diálogo se queda en «Connecting…» indefinidamente. Cinco minutos después
+aparece `Error disconnecting after connection test: Client is not running`.
+
+Reproducido varias veces contra SQL Server 2022 en Docker. Con el perfil **precargado en
+`settings.json`** —que ya lleva `trustServerCertificate: true` desde el principio— no hay primer
+intento fallido y la conexión tarda **76 ms**. Por eso los tests del fork precargan el perfil.
+
+Consecuencia práctica para el usuario: si al conectar por primera vez a un servidor con
+certificado autofirmado el diálogo se queda colgado, la conexión probablemente ya funcionó;
+cerrar el diálogo y usar el árbol.
+
+### 17.4. El lanzador e2e asumía un árbol vacío
+
+`test/e2e/utils/launchVscodeWithMsSqlExt.ts` esperaba el nodo «Add Connection» para dar el
+explorador por listo. Ese nodo solo existe cuando no hay ningún perfil, así que precargar uno
+rompía el arranque de **toda** la suite. Cambiado por esperar a que el árbol de conexiones tenga
+cualquier elemento, que es lo que de verdad indica que ya está montado. Está en la tabla del §0.

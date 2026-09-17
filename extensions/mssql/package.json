@@ -616,6 +616,11 @@
                     "group": "1_MSSQL_primary@1"
                 },
                 {
+                    "command": "sqlworks.openAdminPanel",
+                    "when": "view == objectExplorer && viewItem =~ /\\btype=(Server|Database)\\b/",
+                    "group": "9_SQLWORKS@1"
+                },
+                {
                     "command": "mssql.createDatabase",
                     "when": "view == objectExplorer && viewItem =~ /\\btype=(Folder)\\b.*\\bsubType=(Databases)\\b/",
                     "group": "3_MSSQL_instanceDatabaseActions@1"
@@ -1160,6 +1165,12 @@
             ]
         },
         "commands": [
+            {
+                "command": "sqlworks.openAdminPanel",
+                "title": "Administración",
+                "category": "SQLWorks",
+                "icon": "$(shield)"
+            },
             {
                 "command": "mssql.runQuery",
                 "title": "%mssql.runQuery%",
