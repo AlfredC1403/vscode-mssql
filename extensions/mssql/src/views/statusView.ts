@@ -580,6 +580,18 @@ export default class StatusView implements vscode.Disposable {
     }
 
     private showStatusBarItem(fileUri: string, statusBarItem: vscode.StatusBarItem): void {
+        // [FORK] El selector de conexión del fork (src/custom/connection/connectionSelector.ts)
+        // sustituye a estos dos: los pinta a la izquierda, juntos y siempre en el mismo sitio.
+        // Dejarlos también aquí duplicaría servidor y base en la misma barra. Ver FORK.md §30.
+        const bar = this._statusBars[fileUri];
+        if (
+            bar &&
+            (statusBarItem === bar.statusConnection || statusBarItem === bar.statusChangeDatabase)
+        ) {
+            statusBarItem.hide();
+            return;
+        }
+
         let currentOpenFile = Utils.getActiveTextEditorUri();
 
         // Don't show status bar if URI is owned by a coordinating extension (e.g., PostgreSQL)

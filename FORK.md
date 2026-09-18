@@ -60,6 +60,8 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 55 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
 | `extensions/mssql/package.json` | **M9, 1 línea**: `"visibility": "collapsed"` en nuestra vista `sqlworksSnippets` | Visible por omisión materializaba un segundo `iframe.webview` y rompía dos e2e del upstream, y con ellos los puntos 1 y 7 de la lista de paridad (§26.4). Se arregla en **nuestra** contribución, no en el arnés del upstream | M9 |
 | `extensions/mssql/package.json` | **§29**: `editor.quickSuggestions` dentro del `[sql]` de `contributes.configurationDefaults`, que ya existía | VS Code trae `other` en `offWhenInlineCompletions` y con Copilot delante la lista no se abría sola: solo con Ctrl+Espacio (§29.2). Es un valor de fábrica, por debajo de los ajustes del usuario. **Ninguna línea del upstream sustituida** | §29 |
+| `extensions/mssql/src/views/statusView.ts` | **§30, 6 líneas**: un guardia al principio de `showStatusBarItem` que esconde `statusConnection` y `statusChangeDatabase` | El selector del fork los pinta a la izquierda. Sin el guardia, servidor y base salen dos veces en la misma barra (§30.2). **Ninguna línea del upstream sustituida** | §30 |
+| `extensions/mssql/package.json` | **§30**: `mssql.query.showActiveConnectionAsCodeLensSuggestion` pasa a `default: false` | El CodeLens de la línea 0 se desplaza con el texto y deja de verse (§30.1). El ajuste sigue declarado: quien lo quiera lo enciende | §30 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -119,16 +121,17 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                       | Para qué                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
-| `extensions/mssql/images/sqlworksIcon.png`                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
-| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
-| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
-| `extensions/mssql/test/harness/stsCompletionProbe.mjs`        | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
-| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`  | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
-| `FORK.md`                                                     | Este archivo                                                                                                                                                                                                                                                 |
+| Archivo                                                        | Para qué                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`           | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`  | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                     | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                     | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                    | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `extensions/mssql/test/harness/stsCompletionProbe.mjs`         | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
+| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`   | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
+| `extensions/mssql/src/custom/connection/connectionSelector.ts` | El selector de servidor y base en la barra de estado (§30)                                                                                                                                                                                                   |
+| `FORK.md`                                                      | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -3309,3 +3312,86 @@ objeto que ya existía.
 - **No cambia el orden de las sugerencias.** La hipótesis del `sortText` del §28.5 sigue sin
   escribirse, y ahora además sin motivo: si la lista se abre sola y el filtro encaja, el orden que
   hay ya sirve. Si algún día molesta, ahí está anotada.
+
+---
+
+## 30. El selector de conexión: servidor y base, siempre a la vista
+
+Petición del usuario: «la forma en como se ve la conexión actual quisiera cambiarla, que sea algo más
+como un selector, igual que en dbForge Studio, que solo se cambia el servidor en un combobox y en
+otro la bd. Actualmente sale como si fuera una línea 0 en el editor y si me desplazo se deja de ver,
+por lo que no puedo cambiar de server o bd sin irme hasta arriba».
+
+### 30.1. Lo que había, medido
+
+El upstream pinta la conexión activa como un **CodeLens en la línea 0**
+(`src/queryResult/sqlCodeLensProvider.ts`, `connectionCodeLensRange = new vscode.Range(0, 0, 0, 0)`),
+con tres entradas: perfil, servidor y base. Un CodeLens vive en el texto, así que se desplaza con él.
+
+Comprobado levantando el VS Code real contra la instancia de §28.2: arriba del todo se ve
+`★IRMA-PRODRPT | localhost,1433 | IRMA_PRODRPT`; al bajar a la línea 87, **no queda nada**.
+
+Y había una segunda mitad que el usuario no había encontrado: el upstream **ya** ponía servidor y
+base en la barra de estado (`statusConnection` y `statusChangeDatabase` de `src/views/statusView.ts`),
+con los comandos `mssql.connect` y `mssql.changeDatabase` detrás. O sea que el selector existía;
+estaba al fondo de la derecha, detrás de `SQLCMD: Off`, `MSSQL`, el indicador de lenguaje, el fin de
+línea, la codificación, la sangría y la posición del cursor —y de lo que añada cada extensión
+instalada—, que es un sitio donde no se encuentra.
+
+### 30.2. Lo que hace el fork
+
+`src/custom/connection/connectionSelector.ts`: dos elementos de barra de estado **a la izquierda**,
+con prioridades 1000 y 999 para que caigan juntos y siempre en el mismo orden.
+
+- `$(server) <servidor>` → `mssql.connect`, con la lista de conexiones.
+- `$(database) <base>` → `mssql.changeDatabase`, con la lista de bases del servidor.
+
+Se repintan con el editor activo y con `onConnectionsChanged`, y se esconden fuera de un editor de
+SQL, donde no significarían nada. Sin conexión, el primero pasa a `$(plug) Sin conexión` y es el
+punto de entrada para conectar; el de la base desaparece, porque no hay ninguna que elegir.
+
+Tres decisiones que no son de estilo:
+
+- **La izquierda, no la derecha.** Es el único sitio de la barra que está casi vacío, así que el par
+  cae donde el usuario lo dejó, no donde lo empujen las extensiones que tenga instaladas ese día.
+- **Se apaga el CodeLens.** `mssql.query.showActiveConnectionAsCodeLensSuggestion` pasa a `false` de
+  fábrica. Es un ajuste declarado: quien lo quiera de vuelta lo enciende y conviven los dos.
+- **Se esconde el par del upstream.** Un guardia en `showStatusBarItem` de `statusView.ts`. Sin él,
+  servidor y base salen **dos veces** en la misma barra, que fue justo lo que se vio al probarlo.
+
+### 30.3. Por qué la barra de estado y no un panel flotante
+
+Porque no hay otra cosa. Un widget anclado arriba del editor —el sitio donde dbForge pone sus
+desplegables— no está en la API de extensiones: lo más cercano es la barra de título del editor, y
+ahí solo caben iconos, sin texto que pueda decir a qué servidor estás conectado. Una vista de barra
+lateral sí admitiría dos `<select>` de verdad, pero se ve solo si la barra lateral está abierta, que
+es justo lo que no pasa mientras se escribe SQL.
+
+La barra de estado es la única parte de la ventana que **siempre** está visible, y un clic abre una
+lista filtrable. No es un combobox, pero hace lo que el usuario pedía: cambiar de servidor o de base
+desde donde estés, sin subir a ninguna parte.
+
+### 30.4. Verificación
+
+Con el VS Code real, la extensión y la instancia de §28.2, un script de 87 líneas y la base
+`IRMA_PRODRPT`:
+
+| Qué                                    | Antes              | Ahora                           |
+| -------------------------------------- | ------------------ | ------------------------------- |
+| Conexión visible arriba del archivo    | CodeLens línea 0   | —                               |
+| Conexión visible en la línea 87        | **nada**           | `localhost,1433`+`IRMA_PRODRPT` |
+| Servidor y base duplicados en la barra | —                  | no (guardia de §30.2)           |
+| Cambiar de base desde la línea 87      | subir hasta arriba | un clic                         |
+
+Las capturas de las dos columnas están hechas con el mismo guion, cambiando solo el código.
+
+Coste en deuda de merge: **ninguna línea del upstream sustituida**. Un guardia de 6 líneas al
+principio de `showStatusBarItem` y el `default` de un ajuste que ya estaba declarado.
+
+### 30.5. Lo que esto deliberadamente no hace
+
+- **No borra el CodeLens del upstream**, solo lo apaga de fábrica. El proveedor sigue ahí y el ajuste
+  también, así que un merge no tiene nada que resolver y quien lo prefiera lo recupera.
+- **No abre su propia conexión** ni duplica el gestor del upstream (regla 16.2 del brief): los dos
+  elementos lanzan los comandos que ya existen.
+- **No toca el explorador de objetos**, que es el otro sitio donde se cambia de servidor.

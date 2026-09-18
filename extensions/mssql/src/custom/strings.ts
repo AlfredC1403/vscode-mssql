@@ -270,4 +270,17 @@ export const Strings = {
         settingEnabled: (label: string, key: string, scope: string) =>
             `SQLWorks: ${label} está activado en los ajustes de ${scope} (\`${key}\`). Esa función descarga y ejecuta un binario desde un feed externo, que no es lo que este fork hace por omisión. Ver FORK.md §26.8.`,
     },
+    /** El selector de servidor y base de datos de la barra de estado (§30). */
+    connectionSelector: {
+        /** Sin conexión en este documento. */
+        noConnection: "Sin conexión",
+        /** Mientras el servidor responde. */
+        connecting: "Conectando…",
+        /** El perfil no fija base, así que la conexión usa la predeterminada del login. */
+        defaultDatabase: "(predeterminada)",
+        /** Los tooltips dicen qué pasa al pulsar, que es lo que convierte la etiqueta en selector. */
+        connectTooltip: "Conectar este script a un servidor",
+        serverTooltip: (server: string) => `Conectado a ${server}. Pulsa para cambiar de servidor.`,
+        databaseTooltip: "Pulsa para cambiar de base de datos",
+    },
 } as const;

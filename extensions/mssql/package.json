@@ -3394,7 +3394,7 @@
                 },
                 "mssql.query.showActiveConnectionAsCodeLensSuggestion": {
                     "type": "boolean",
-                    "default": true,
+                    "default": false,
                     "description": "%mssql.query.showActiveConnectionAsCodeLensSuggestion%"
                 },
                 "mssql.ignorePlatformWarning": {

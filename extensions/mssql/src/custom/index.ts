@@ -7,6 +7,7 @@ import * as vscode from "vscode";
 import ConnectionManager from "../controllers/connectionManager";
 import { TreeNodeInfo } from "../objectExplorer/nodes/treeNodeInfo";
 import { AdminPanelController } from "./admin/panels/adminPanelController";
+import { ConnectionSelector } from "./connection/connectionSelector";
 import { SnippetCompletionProvider } from "./snippets/completion";
 import { SnippetsViewController } from "./snippets/snippetsViewController";
 import { FormatProfilesController } from "./format/formatProfilesController";
@@ -121,6 +122,12 @@ export function registerCustom(
             pickAndApplyProfile(context),
         ),
     );
+
+    // --- §30: el selector de conexión, siempre a la vista ---
+    //
+    // Sustituye al CodeLens de la línea 0 del upstream, que se desplaza con el texto. Ver
+    // `connection/connectionSelector.ts`.
+    keep(new ConnectionSelector(connectionManager));
 
     // --- M9: vigilancia de las salidas de red del upstream ---
     //
