@@ -21,6 +21,57 @@ export const WebviewStrings = {
         no: "No",
         none: "Ninguno",
         unknown: "Desconocido",
+        cancel: "Cancelar",
+    },
+
+    /** Diálogos de creación de principales (M6). */
+    create: {
+        /** El botón no dice «Crear»: nada se crea hasta aplicar el conjunto de cambios. */
+        stage: "Añadir a los cambios pendientes",
+        newButton: "Nuevo",
+        invalidName:
+            "Ese nombre no vale para SQL Server: tiene que empezar por letra o guion bajo, sin espacios al principio ni al final y sin dos guiones seguidos.",
+        mustChangeNeeds:
+            "Obligar a cambiar la contraseña exige también la política y la caducidad: SQL Server rechaza la combinación.",
+        ownerLabel: "Propietario",
+        ownerHint: "Quién puede modificar el rol. Si se deja vacío, lo será quien lo cree.",
+        ownerDefault: "Quien lo cree",
+        login: {
+            title: "Crear un login de servidor",
+            nameLabel: "Nombre del login",
+            namePlaceholder: "ventas_app",
+            defaultDatabaseLabel: "Base de datos por omisión",
+            defaultDatabaseHint:
+                "A la que entra al conectarse si no pide otra. No le da permiso sobre ella.",
+            defaultDatabaseDefault: "La del servidor (master)",
+            checkPolicy: "Aplicar la política de contraseñas del sistema",
+            checkExpiration: "Aplicar la caducidad de la contraseña",
+            mustChange: "Obligar a cambiarla en el primer inicio de sesión",
+            /** Donde el usuario busca el campo de contraseña, se explica por qué no está. */
+            passwordLater:
+                "La contraseña no se pide aquí: se pedirá al aplicar los cambios, y no se guarda en los ajustes ni aparece en el script.",
+        },
+        user: {
+            title: "Crear un usuario de base de datos",
+            nameLabel: "Nombre del usuario",
+            namePlaceholder: "ventas_app",
+            loginLabel: "Login del servidor",
+            loginHint:
+                "El login con el que se conectará. Sin login, el usuario sirve para permisos y pertenencias pero no puede conectarse.",
+            withoutLogin: "Sin login",
+            schemaLabel: "Esquema por omisión",
+            schemaDefault: "dbo",
+        },
+        serverRole: {
+            title: "Crear un rol de servidor",
+            nameLabel: "Nombre del rol",
+            namePlaceholder: "operadores_copia",
+        },
+        databaseRole: {
+            title: "Crear un rol de base de datos",
+            nameLabel: "Nombre del rol",
+            namePlaceholder: "ventas_editores",
+        },
     },
     adminPanel: {
         title: "Administración",
@@ -88,6 +139,8 @@ export const WebviewStrings = {
             policy: "Política",
             roles: "Roles de servidor",
             created: "Creado",
+            /** Columna de acciones de M6, separada de la de habilitar/deshabilitar de M3. */
+            manage: "Administrar",
         },
         kinds: {
             SQL_LOGIN: "Login SQL",
@@ -290,6 +343,14 @@ export const WebviewStrings = {
         discardOneAria: (subject: string) => `Quitar el cambio de ${subject}`,
         showExact: "Ver el texto exacto que se envía al servidor",
         hideExact: "Ocultar el texto exacto",
+        /**
+         * Aviso de la regla 11.3: el script muestra un hueco donde va la contraseña, y hay que
+         * decirlo. Callarlo sería mostrar un texto que no es exactamente el que se envía.
+         */
+        secretsInPlan: (count: number) =>
+            count === 1
+                ? "Donde dice «<contraseña>» irá la que escribas al aplicar. Es lo único que este texto no muestra tal cual, y no se guarda en ningún sitio."
+                : `Donde dice «<contraseña>» irán las que escribas al aplicar (${count}). Es lo único que este texto no muestra tal cual, y no se guardan en ningún sitio.`,
         willAskToType: (name: string) =>
             `Antes de ejecutar habrá que escribir «${name}» para confirmar.`,
         lastFailed:
@@ -327,6 +388,18 @@ export const WebviewStrings = {
         dropUserWarning:
             "Pedirá escribir el nombre del usuario antes de ejecutar: es una operación destructiva.",
         dropUserAria: (user: string) => `Borrar el usuario ${user}`,
+        /** M6. */
+        resetPassword: "Contraseña",
+        resetPasswordAria: (login: string) => `Restablecer la contraseña del login ${login}`,
+        /** Un login de Windows tiene la contraseña en el dominio, no en SQL Server. */
+        windowsLoginPassword:
+            "Este login es de Windows: su contraseña está en el dominio y no se cambia desde SQL Server.",
+        dropLoginAria: (login: string) => `Borrar el login ${login}`,
+        dropLoginWarning:
+            "Pedirá escribir el nombre antes de ejecutar. Borrar un login NO borra los usuarios de base que lo tenían asignado: se quedan huérfanos.",
+        dropRoleAria: (role: string) => `Borrar el rol ${role}`,
+        dropRoleWarning:
+            "Pedirá escribir el nombre antes de ejecutar. Si el rol tiene miembros, quítalos en el mismo conjunto de cambios: SQL Server no borra un rol con miembros.",
         removeMember: "Quitar",
         removeMemberAria: (member: string, role: string) => `Quitar ${member} del rol ${role}`,
         /** Por qué una fila no ofrece acción. */

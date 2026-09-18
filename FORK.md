@@ -626,6 +626,12 @@ El upstream ya trae, vía el API **Object Management** del STS
 | Backup y restore                                         | fuera de alcance del brief |
 | Cambiar contraseña (`changePasswordWebviewController`)   | M3                         |
 
+> **Corregido en §23.5 (M6).** La última fila es falsa: ese controlador **no** tiene comando y solo
+> salta cuando falla una conexión por contraseña caducada (`connectionManager.ts:1984`). Es el flujo
+> de recuperación de tu propia contraseña, no una operación de administrador sobre otro login, así que
+> restablecer la de un tercero sigue siendo trabajo propio. Las tres filas de bases de datos **sí**
+> son correctas, y por eso M6 no las reimplementa (§23.4).
+
 Y `objectManagement/script` **devuelve el T-SQL sin ejecutarlo** — que es exactamente la regla
 11.1 del brief («nunca ejecutes DDL sin mostrar antes el script»), ya implementada.
 
@@ -1980,8 +1986,204 @@ insignia sale y que un cambio **reversible** también exige escribir el nombre d
 
 - **No crea logins, usuarios ni roles**, y por tanto no toca contraseñas. Es M6. La razón es de
   alcance, **no** que la regla 11.3 sea imposible: se cumple con marcador en el script y sustitución
-  en el momento de ejecutar, y el diseño ya lo contempla.
+  en el momento de ejecutar, y el diseño ya lo contempla. _(Hecho en M6; el diseño previsto era el
+  correcto. Ver §23.2.)_
 - **No borra bases de datos.** `DROP DATABASE` es de las tres sentencias no transaccionales
   (número 574, §22.1) y va por la ruta irreversible, que hoy solo entrega `KILL`.
 - **No comprueba permisos de escritura antes de ejecutar**, por la medida 6.
 - **No usa `objectManagement/save`, `/drop` ni `/rename`** (§22.5).
+
+---
+
+## 23. Creación de principales y contraseñas (M6)
+
+M6 es el hito de las contraseñas, y por tanto el de la regla 11.3 del brief. También añade crear y
+borrar logins, usuarios y roles, que son las operaciones que faltaban para administrar la seguridad
+de verdad y no solo mirarla.
+
+Igual que en M5, primero se midió el motor. Aquí las medidas no solo ajustaron el diseño: una de
+ellas es un **fallo silencioso** que ningún informe del servidor puede detectar.
+
+### 23.1. Las medidas
+
+**1. La contraseña no puede ser un parámetro. Es la restricción que manda en todo lo demás.**
+
+`CREATE LOGIN [x] WITH PASSWORD = @variable` es un **error de sintaxis (102)**. El DDL de SQL Server
+no acepta parámetros ahí, así que la contraseña tiene que ser un **literal dentro del texto**. Y
+`query/simpleexecute` del STS recibe una sola cadena: no hay canal de parámetros. Las dos cosas
+juntas significan que **la contraseña viaja en el texto que se envía**, y no hay diseño que lo evite.
+
+Lo que sí se puede controlar es quién la ve y cuándo, y eso es lo que hace §23.2.
+
+**2. Una contraseña de 129 caracteres o más: `CREATE LOGIN` no crea nada y no da ningún error.**
+
+Medido carácter a carácter: 127 crea, 128 crea, **129 no crea y no falla**, 130 tampoco. El lote
+informaría `aplicado` y no habría login. El informe del motor no puede distinguirlo de un éxito, así
+que la única barrera posible es el cliente: `validateSecret` rechaza por encima de 128 y **aborta
+antes de enviar**. Es la medida más importante de M6, porque sin ella el panel mentiría.
+
+**3. `QUOTENAME(@secreto, '''')` es el escapado correcto, y lo hace el motor.**
+
+Con una contraseña que lleva comilla simple, corchete de cierre, punto y coma, `--`, salto de línea y
+`GO`, el login se crea y `PWDCOMPARE` con la original devuelve **1**: se guarda exactamente lo que se
+escribió. Por eso el lote **no** escapa la sentencia en TypeScript: arma el texto en el servidor con
+`QUOTENAME`, que es la primitiva del propio motor. La regla 11.2 prohíbe escapar a mano, y aquí no
+hace falta.
+
+El anidamiento a mano sí se midió, y funciona (`REPLACE(@inner, '''', '''''')` con `PWDCOMPARE = 1`),
+pero son cuatro niveles de comillas en algunos puntos. Se descartó a propósito: funcionar no es lo
+mismo que ser mantenible.
+
+**4. La contraseña no aparece en ningún mensaje de error.** Medido en cuatro caminos: error de
+sintaxis después de la contraseña (el motor cita el token del error, no el literal), contraseña que
+intenta romper la cadena, contraseña con caracteres de control, y error de ejecución por login
+duplicado. En los cuatro, `ERROR_MESSAGE()` no la contiene.
+
+**5. La contraseña no queda en la caché de planes.** Esta medida hubo que repetirla, porque la
+primera estaba **contaminada**: el script de la sonda contenía el centinela como literal, así que lo
+que aparecía en `sys.dm_exec_cached_plans` era el propio fichero de la sonda y no la sentencia.
+Repetida construyendo la contraseña con `NCHAR()` para que la cadena no estuviera en el texto
+enviado, y enviando además un lote con la forma exacta que usa el fork: **0 planes** en los dos
+casos. Un lote de DDL con control de transacción no entra en la caché.
+
+**6. Todo el DDL de principales es transaccional.** `CREATE LOGIN`, `CREATE SERVER ROLE`,
+`CREATE USER`, `CREATE ROLE`, `DROP LOGIN` y `ALTER LOGIN ... WITH PASSWORD` se revierten con
+`ROLLBACK`; en el caso del `ALTER`, la contraseña vieja vuelve a ser la válida (`PWDCOMPARE` pasa de
+1 a 0). Así que M6 entra por el lote normal de M5 y no por la vía irreversible, donde solo quedan el
+DDL de base de datos y `KILL`.
+
+**7. Números de error que M6 necesita explicar**, medidos: **15025** el principal ya existe (login y
+rol de servidor dan el mismo), **15099** `MUST_CHANGE` con `CHECK_EXPIRATION = OFF`, **15144** borrar
+un rol que todavía tiene miembros. Los tres tienen mensaje propio en `Strings.writeGate.engineError`.
+
+**8. `MUST_CHANGE` va pegado a `PASSWORD`**, antes de la coma, y exige `CHECK_EXPIRATION = ON` y
+`CHECK_POLICY = ON`. El generador **aborta** la combinación inválida en lugar de dejar que el servidor
+rechace el lote: el usuario se entera al montar el cambio, no al aplicarlo.
+
+### 23.2. Cómo se cumple la 11.3 con la contraseña dentro del texto
+
+Cuatro cosas, y ninguna depende de la buena voluntad de quien llame:
+
+1. **La contraseña no entra en el estado del webview.** El formulario de creación **no tiene campo de
+   contraseña** —lo dice en pantalla, donde el usuario lo buscaría— y la petición que el webview manda
+   al host no lleva ninguno. `PendingChange` tampoco: hay un test que lo fija.
+2. **La sentencia lleva una ranura, no un valor.** El generador pone `@@SECRETO@@` y declara
+   `secret: { prompt, subject }`. El marcador **no tiene comillas**, así que `validateStatement` sigue
+   valiendo tal cual, y hay dos comprobaciones nuevas: marcador sin ranura y ranura sin marcador son
+   las dos un fallo del generador y se rechazan.
+3. **El lote se construye dos veces con la misma función.** Sin secretos sale el marcador de posición
+   `N'<contraseña>'`, que es lo que se publica y lo que se ve; con secretos sale el valor real, y solo
+   en la llamada que ejecuta. Un test compara los dos textos línea a línea y exige que difieran en
+   **exactamente una**: el `DECLARE`. Eso convierte «la vista previa no muestra la contraseña» en algo
+   comprobable en lugar de una promesa.
+4. **El host la pide al final**, con `showInputBox({ password: true })`, después del diálogo del
+   script y después de escribir el nombre. Así no hay un secreto en memoria mientras alguien mira un
+   diálogo, y quien cancela en una barrera anterior no ha tenido que escribirla. Se pide **dos veces**
+   y se comparan: una errata en una contraseña que no se ve crearía un login al que nadie puede
+   entrar, y solo se descubriría al intentar usarlo.
+
+Y una red que no es la defensa principal pero cierra un agujero real: `redactSecrets` tacha el valor
+de cualquier mensaje antes de devolverlo. Hacía falta porque `describeQueryError` **afirmaba** en su
+comentario que nunca incluye la consulta, cuando en realidad devuelve el mensaje del controlador tal
+cual. En M5 eso era inocuo; con una contraseña en el lote, no. La medida 4 dice que el motor no la
+filtra, pero eso es una medida de una versión concreta: la garantía no debe depender de haberla hecho.
+
+### 23.3. Qué se puede crear, y qué no
+
+| Operación                                     | Ranura de contraseña | Destructiva (regla 11.5) |
+| --------------------------------------------- | -------------------- | ------------------------ |
+| `CREATE LOGIN`                                | Sí                   | No                       |
+| `ALTER LOGIN ... WITH PASSWORD` (restablecer) | Sí                   | **Sí**                   |
+| `CREATE USER` (con login o `WITHOUT LOGIN`)   | No                   | No                       |
+| `CREATE SERVER ROLE` / `CREATE ROLE`          | No                   | No                       |
+| `DROP LOGIN`                                  | No                   | Sí                       |
+| `DROP SERVER ROLE` / `DROP ROLE`              | No                   | Sí                       |
+
+Restablecer una contraseña se cuenta como destructiva a propósito: no borra nada, pero deja fuera a
+quien estuviera usando la anterior, y eso merece la misma barrera que un borrado.
+
+Dos avisos que el panel da porque el motor no los da:
+
+- **Borrar un login no borra los usuarios de base que lo tenían asignado.** Medido: el usuario se
+  queda huérfano. La acción lo dice antes de montarse.
+- **Un rol con miembros no se borra** (15144). Hay que quitar los miembros **en el mismo conjunto de
+  cambios**, y eso es justo lo que la transacción hace posible: medido, el lote «quitar miembro +
+  borrar rol» se aplica entero. Sin transacción habría que hacerlo en dos pasos, con el riesgo de
+  dejar el rol vacío y sin borrar.
+
+Un usuario **contenido** (con su propia contraseña, en una base con `CONTAINMENT = PARTIAL`) no se
+crea: es otro tipo de objeto y este panel no gestiona bases contenidas. Si se añade, será una función
+aparte con su propia ranura, no un parámetro opcional en `buildCreateUserStatement`.
+
+### 23.4. Bases de datos: no se reimplementan, y la transacción no aportaría nada
+
+El brief pone crear, borrar y renombrar bases de datos en M6. **No se hace**, por dos razones que
+apuntan en la misma dirección:
+
+1. **El upstream ya las trae**, y no a medias: `createDatabaseWebviewController`,
+   `dropDatabaseWebviewController` y el comando de renombrar, con sus tres entradas en el menú
+   contextual del árbol (`mssql.createDatabase`, `mssql.dropDatabase`, `mssql.renameDatabase`).
+   Reimplementarlas sería exactamente lo que la prohibición §16.2 del brief impide: un segundo stack
+   de interfaz para algo que ya funciona.
+2. **La garantía de M5 no se puede dar ahí de todas formas.** Medido: `CREATE DATABASE` dentro de una
+   transacción da el error **226** y `DROP DATABASE` el **574**. No hay transacción posible, así que
+   envolverlas en nuestro lote no añadiría ni atomicidad ni vuelta atrás. Lo único que aportaría el
+   fork es la vista previa, y `objectManagement/script` ya la da para bases de datos, donde —a
+   diferencia de los logins— **no hay contraseña que pueda salir en claro**.
+
+Queda anotado como decisión, no como olvido. Si algún día se quiere unificar la vista previa de las
+bases con la del panel, el sitio es la vía irreversible del ejecutor, que existe y está probada con
+`KILL`.
+
+### 23.5. Corrección a §11.6
+
+§11.6 decía «Cambiar contraseña (`changePasswordWebviewController`) | M3», dando por hecho que el
+upstream ya cubría el caso. **No lo cubre.** Ese controlador no tiene comando en `package.json` y
+solo se invoca desde `connectionManager.ts:1984`, cuando una conexión falla con
+`SqlConnectionErrorType.PasswordExpired`: es el flujo de recuperación de **tu propia** contraseña
+caducada al conectar, no una operación de administrador sobre otro login. Restablecer la contraseña
+de un tercero es de M6 y es propia.
+
+### 23.6. Verificación
+
+| Qué                                | Estado                                             |
+| ---------------------------------- | -------------------------------------------------- |
+| Unitarios propios de M6            | ✅ 41 nuevos (`secrets` 22, `createPrincipals` 19) |
+| Suite completa del repositorio     | ✅ 5122 + 205, 0 fallos                            |
+| Generadores contra SQL Server 2022 | ✅ arnés directo, 30/30                            |
+| Interfaz                           | ✅ `test/e2e/sqlworksAdminPanel.spec.ts`, 2 tests  |
+
+El arnés ejecuta **el T-SQL que generan las funciones del fork**, no una imitación: importa los
+módulos compilados, construye el lote con `buildTransactionalBatch` y lo manda con `sqlcmd`. Lo que
+comprueba, entre otras cosas:
+
+1. Un login creado con la contraseña `a'b]]';--Xy9!` queda con **esa** contraseña: `PWDCOMPARE` = 1.
+2. El lote de vista previa y el de ejecución difieren en **una línea**, y la de vista previa no
+   contiene la contraseña.
+3. Un lote mixto de cuatro creaciones (rol de servidor, pertenencia, usuario con esquema, rol de
+   base) se aplica entero.
+4. Un lote de dos `CREATE LOGIN` donde el segundo ya existe se **revierte entero** con el 15025, el
+   primero no queda creado, y el mensaje del motor no contiene **ninguna** de las dos contraseñas.
+5. Restablecer la contraseña deja válida la nueva.
+6. El generador aborta `MUST_CHANGE` sin caducidad, y la combinación válida se aplica.
+7. Una contraseña de 129 caracteres se rechaza antes de enviar, con un motivo que no la repite.
+8. «Quitar miembro + borrar rol» en el mismo lote funciona, y borrar el rol a secas da 15144.
+9. `DROP LOGIN` deja huérfano al usuario de base.
+
+Sin restos al terminar. El e2e **cancela en la caja de la contraseña** y comprueba releyendo del
+servidor que el login no se creó; antes verifica que el formulario no tiene ninguna caja de
+contraseña, que el script muestra `N'<contraseña>'`, que el lote exacto lleva
+`DECLARE @secreto1 ... = N'<contraseña>'` y `QUOTENAME(@secreto1, '''')`, y que la caja que aparece al
+aplicar es de tipo `password` de verdad.
+
+### 23.7. Lo que M6 deliberadamente no hace
+
+- **No crea ni borra bases de datos** (§23.4).
+- **No gestiona usuarios contenidos** (§23.3).
+- **No guarda contraseñas en ningún sitio**, ni siquiera en el almacén de credenciales de VS Code:
+  el panel administra logins ajenos, no perfiles de conexión propios, así que no hay nada que
+  recordar.
+- **No comprueba la política de contraseñas antes de enviar.** El contenedor Linux de pruebas no
+  aplica complejidad (medido: aceptó `clave_secreta_123` con `CHECK_POLICY = ON`), así que cualquier
+  validación propia sería una suposición sobre la política del servidor de destino. Si el motor la
+  rechaza, la transacción se revierte y el panel muestra su mensaje.

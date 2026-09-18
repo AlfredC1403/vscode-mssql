@@ -15,6 +15,12 @@
  */
 
 import { isValidIdentifier } from "../../../util/identifiers";
+import {
+    SECRET_MARKER,
+    SECRET_PLACEHOLDER,
+    SecretRequirement,
+    countSecretMarkers,
+} from "./secrets";
 
 /** Una sentencia del plan, ya construida y validada por su generador. */
 export interface PlannedStatement {
@@ -41,6 +47,12 @@ export interface PlannedStatement {
      * que el objeto siga siendo el que el usuario vio. Si falla, el lote entero se revierte.
      */
     precondition?: StatementPrecondition;
+    /**
+     * La sentencia necesita una contraseña (regla 11.3). Si está puesto, `sql` tiene que llevar
+     * `SECRET_MARKER` **exactamente una vez**, y el valor real no vive aquí: lo pide el host al
+     * ejecutar y lo sustituye el ejecutor. Ver `ddl/secrets.ts`.
+     */
+    secret?: SecretRequirement;
 }
 
 /** Precondición de una sentencia: una comprobación que lanza si el mundo cambió. */
@@ -206,7 +218,30 @@ export function validateStatement(
         // El panel comparte la conexión con el editor del usuario (FORK.md §21.1).
         return "Una sentencia del plan hace USE, y el panel no cambia la base de la conexión.";
     }
+    // El marcador de contraseña y la ranura tienen que ir juntos. Si `sql` lleva el marcador sin
+    // ranura, el lote emitiría el marcador tal cual al servidor; si hay ranura sin marcador, se
+    // pediría una contraseña que no se usa. Las dos cosas son fallos del generador, no del usuario.
+    const markers = countSecretMarkers(statement.sql);
+    if (statement.secret && markers !== 1) {
+        return `Una sentencia del plan pide una contraseña pero lleva ${markers} marcadores en lugar de uno.`;
+    }
+    if (!statement.secret && markers > 0) {
+        return "Una sentencia del plan lleva el marcador de contraseña sin declarar que la necesita.";
+    }
+    // Una sentencia suelta (irreversible) se envía tal cual, sin el envoltorio que sustituye el
+    // marcador, así que ahí una contraseña no tiene dónde entrar.
+    if (options.routed === false && statement.secret) {
+        return "Una sentencia irreversible no puede llevar contraseña: se envía sin envoltorio.";
+    }
     return undefined;
+}
+
+/** Trozos de una sentencia con ranura: lo de antes y lo de después del marcador. */
+export function splitOnSecret(sql: string): { before: string; after: string } {
+    const index = sql.indexOf(SECRET_MARKER);
+    return index < 0
+        ? { before: sql, after: "" }
+        : { before: sql.slice(0, index), after: sql.slice(index + SECRET_MARKER.length) };
 }
 
 /**
@@ -230,8 +265,13 @@ export function renderReadableScript(plan: ExecutionPlan): string {
             if (statement.precondition) {
                 lines.push(`--    Antes se comprueba: ${statement.precondition.message}`);
             }
+            if (statement.secret) {
+                lines.push(
+                    "--    La contraseña se pide al ejecutar y no se muestra aquí (regla 11.3).",
+                );
+            }
             lines.push(`USE ${bracket(statement.database ?? "")};`);
-            lines.push(`${statement.sql};`);
+            lines.push(`${readableSql(statement)};`);
             lines.push("");
         });
         lines.push("COMMIT TRANSACTION;");
@@ -242,11 +282,20 @@ export function renderReadableScript(plan: ExecutionPlan): string {
         lines.push("-- se ejecutan aparte y NO se pueden revertir.");
         plan.irreversible.forEach((statement, index) => {
             lines.push(`-- ${index + 1}. ${statement.label} (irreversible)`);
-            lines.push(`${statement.sql};`);
+            lines.push(`${readableSql(statement)};`);
         });
     }
 
     return lines.join("\n");
+}
+
+/**
+ * La sentencia como se lee, con el marcador de contraseña pintado como un literal.
+ *
+ * Así el script legible se parece al T-SQL que alguien escribiría a mano, sin mostrar el valor.
+ */
+function readableSql(statement: PlannedStatement): string {
+    return statement.sql.split(SECRET_MARKER).join(`N'${SECRET_PLACEHOLDER}'`);
 }
 
 /**

@@ -64,8 +64,10 @@ export class AdminQueryRunner {
 /**
  * Convierte el error del STS en algo que se pueda mostrar.
  *
- * Nunca incluye la consulta ni ningún parámetro: un mensaje de error no es sitio para que aparezca
- * una contraseña ni datos de un servidor de producción (§11.3 del brief).
+ * **No añade** la consulta ni ningún parámetro, pero devuelve el mensaje del controlador tal cual, y
+ * de lo que ese mensaje trae no manda este archivo. Desde M6 el lote puede llevar una contraseña, así
+ * que quien la conoce —`WriteGate.runPlan`— tacha el valor del mensaje antes de devolverlo
+ * (`redactSecrets`). La garantía de la regla 11.3 está ahí, no aquí.
  */
 export function describeQueryError(error: unknown): string {
     if (error instanceof Error && error.message) {

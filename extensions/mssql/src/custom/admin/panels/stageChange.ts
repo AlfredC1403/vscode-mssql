@@ -13,6 +13,15 @@ import {
     buildLoginEnableStatement,
     buildUserDefaultSchemaStatement,
 } from "../sql/ddl/principals";
+import {
+    buildCreateDatabaseRoleStatement,
+    buildCreateLoginStatement,
+    buildCreateServerRoleStatement,
+    buildCreateUserStatement,
+    buildDropLoginStatement,
+    buildDropRoleStatement,
+    buildResetPasswordStatement,
+} from "../sql/ddl/createPrincipals";
 import { toPermissionScope } from "../sql/ddl/permissionNames";
 import {
     loginUnchanged,
@@ -225,6 +234,155 @@ export function stageRequestToStatement(
                         scope: database,
                         sql: statement.sql,
                         // La única destructiva de M5: obliga a escribir el nombre (regla 11.5).
+                        destructive: true,
+                    },
+                };
+            }
+
+            // ----------------------------------------------------------------
+            // M6: creación de principales. La contraseña **no llega aquí**: el generador pone la
+            // ranura y el host pide el valor al ejecutar (regla 11.3).
+            // ----------------------------------------------------------------
+            case "createLogin": {
+                const statement = buildCreateLoginStatement({
+                    name: request.login,
+                    policy: {
+                        checkPolicy: request.checkPolicy,
+                        checkExpiration: request.checkExpiration,
+                        mustChange: request.mustChange,
+                    },
+                    defaultDatabase: request.defaultDatabase,
+                });
+                return {
+                    statement,
+                    change: {
+                        kind: "createLogin",
+                        subject: request.login,
+                        transition: "→ Login nuevo",
+                        scope: "Servidor",
+                        sql: statement.sql,
+                        destructive: false,
+                    },
+                };
+            }
+
+            case "resetPassword": {
+                const statement = buildResetPasswordStatement(request.login, {
+                    mustChange: request.mustChange,
+                    unlock: request.unlock,
+                });
+                return {
+                    statement,
+                    change: {
+                        kind: "resetPassword",
+                        subject: request.login,
+                        transition: "→ Contraseña nueva",
+                        scope: "Servidor",
+                        sql: statement.sql,
+                        // Cambiar una contraseña no borra nada, pero deja fuera a quien la usara, así
+                        // que se trata como destructiva: obliga a escribir el nombre (regla 11.5).
+                        destructive: true,
+                    },
+                };
+            }
+
+            case "dropLogin": {
+                const statement = buildDropLoginStatement(request.login);
+                statement.precondition = loginUnchanged(request.login, request.createDate);
+                return {
+                    statement,
+                    change: {
+                        kind: "dropLogin",
+                        subject: request.login,
+                        transition: "→ Borrado",
+                        scope: "Servidor",
+                        sql: statement.sql,
+                        destructive: true,
+                    },
+                };
+            }
+
+            case "createUser": {
+                const statement = buildCreateUserStatement({
+                    name: request.user,
+                    database,
+                    source: request.login
+                        ? { kind: "login", login: request.login }
+                        : { kind: "withoutLogin" },
+                    defaultSchema: request.defaultSchema,
+                });
+                return {
+                    statement,
+                    change: {
+                        kind: "createUser",
+                        subject: request.user,
+                        transition: request.login ? `→ Para ${request.login}` : "→ Sin login",
+                        scope: database,
+                        sql: statement.sql,
+                        destructive: false,
+                    },
+                };
+            }
+
+            case "createServerRole": {
+                const statement = buildCreateServerRoleStatement(request.role, request.owner);
+                return {
+                    statement,
+                    change: {
+                        kind: "createServerRole",
+                        subject: request.role,
+                        transition: "→ Rol nuevo",
+                        scope: "Servidor",
+                        sql: statement.sql,
+                        destructive: false,
+                    },
+                };
+            }
+
+            case "createDatabaseRole": {
+                const statement = buildCreateDatabaseRoleStatement(
+                    database,
+                    request.role,
+                    request.owner,
+                );
+                return {
+                    statement,
+                    change: {
+                        kind: "createDatabaseRole",
+                        subject: request.role,
+                        transition: "→ Rol nuevo",
+                        scope: database,
+                        sql: statement.sql,
+                        destructive: false,
+                    },
+                };
+            }
+
+            case "dropServerRole": {
+                const statement = buildDropRoleStatement("server", request.role);
+                return {
+                    statement,
+                    change: {
+                        kind: "dropServerRole",
+                        subject: request.role,
+                        transition: "→ Borrado",
+                        scope: "Servidor",
+                        sql: statement.sql,
+                        destructive: true,
+                    },
+                };
+            }
+
+            case "dropDatabaseRole": {
+                const statement = buildDropRoleStatement("database", request.role, database);
+                return {
+                    statement,
+                    change: {
+                        kind: "dropDatabaseRole",
+                        subject: request.role,
+                        transition: "→ Borrado",
+                        scope: database,
+                        sql: statement.sql,
                         destructive: true,
                     },
                 };

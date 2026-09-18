@@ -2,7 +2,7 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
     Badge,
     Button,
@@ -10,9 +10,11 @@ import {
     createTableColumn,
     makeStyles,
 } from "@fluentui/react-components";
+import { AddRegular } from "@fluentui/react-icons";
 
 import { DatabaseRole } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { CreatePrincipalDialog } from "./createPrincipalDialog";
 import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
@@ -50,6 +52,7 @@ export const DatabaseRolesView = () => {
     const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.databaseRoles);
     const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
+    const [creating, setCreating] = useState(false);
 
     const columns = useMemo(
         () => [
@@ -151,26 +154,83 @@ export const DatabaseRolesView = () => {
                     );
                 },
             }),
+            // --- M6: borrar un rol propio. Los predefinidos de SQL Server no se borran. ---
+            createTableColumn<DatabaseRole>({
+                columnId: "m6",
+                renderHeaderCell: () => Loc.sessions.columns.actions,
+                renderCell: (role) => {
+                    const staged = pending.some(
+                        (change) =>
+                            change.kind === "dropDatabaseRole" && change.subject === role.name,
+                    );
+                    return (
+                        <Button
+                            size="small"
+                            appearance="subtle"
+                            disabled={role.fixed || staged}
+                            title={
+                                role.fixed
+                                    ? Loc.rowActions.systemObject
+                                    : staged
+                                      ? Loc.rowActions.staged
+                                      : Loc.rowActions.dropRoleWarning
+                            }
+                            aria-label={Loc.rowActions.dropRoleAria(role.name)}
+                            onClick={() =>
+                                context?.stageChange({ kind: "dropDatabaseRole", role: role.name })
+                            }>
+                            {Loc.rowActions.dropUser}
+                        </Button>
+                    );
+                },
+            }),
         ],
         [styles, context, pending],
     );
 
     return (
-        <DataTable<DatabaseRole>
-            section={section}
-            columns={columns}
-            getRowId={(role) => role.name}
-            getSearchText={(role) => [role.name, role.owner, ...role.members].join(" ")}
-            searchPlaceholder={Loc.databaseRoles.searchPlaceholder}
-            emptyMessage={Loc.databaseRoles.empty}
-            legend={Loc.databaseRoles.legend}
-            columnSizing={{
-                name: { minWidth: 180, defaultWidth: 220 },
-                kind: { minWidth: 120, defaultWidth: 140 },
-                owner: { minWidth: 120, defaultWidth: 150 },
-                memberCount: { minWidth: 90, defaultWidth: 90 },
-                members: { minWidth: 240, defaultWidth: 380 },
-            }}
-        />
+        <>
+            <DataTable<DatabaseRole>
+                section={section}
+                columns={columns}
+                getRowId={(role) => role.name}
+                getSearchText={(role) => [role.name, role.owner, ...role.members].join(" ")}
+                searchPlaceholder={Loc.databaseRoles.searchPlaceholder}
+                emptyMessage={Loc.databaseRoles.empty}
+                legend={Loc.databaseRoles.legend}
+                toolbar={
+                    <Button
+                        size="small"
+                        appearance="primary"
+                        icon={<AddRegular />}
+                        onClick={() => setCreating(true)}>
+                        {Loc.create.newButton}
+                    </Button>
+                }
+                columnSizing={{
+                    name: { minWidth: 180, defaultWidth: 220 },
+                    kind: { minWidth: 120, defaultWidth: 140 },
+                    owner: { minWidth: 120, defaultWidth: 150 },
+                    memberCount: { minWidth: 90, defaultWidth: 90 },
+                    members: { minWidth: 240, defaultWidth: 340 },
+                    m6: { minWidth: 90, defaultWidth: 100 },
+                }}
+            />
+            <CreatePrincipalDialog
+                open={creating}
+                kind="databaseRole"
+                relatedOptions={[]}
+                secondaryOptions={[]}
+                onCancel={() => setCreating(false)}
+                onConfirm={(result) => {
+                    setCreating(false);
+                    context?.stageChange({
+                        kind: "createDatabaseRole",
+                        role: result.name,
+                        owner: result.related || undefined,
+                    });
+                }}
+            />
+        </>
     );
 };

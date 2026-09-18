@@ -21,7 +21,16 @@ export type PendingChangeKind =
     | "databaseRoleMembership"
     | "loginEnabled"
     | "userDefaultSchema"
-    | "dropUser";
+    | "dropUser"
+    // M6: creación y borrado de principales, y restablecer una contraseña.
+    | "createLogin"
+    | "resetPassword"
+    | "dropLogin"
+    | "createUser"
+    | "createServerRole"
+    | "createDatabaseRole"
+    | "dropServerRole"
+    | "dropDatabaseRole";
 
 /**
  * Un cambio montado por el usuario.
@@ -69,12 +78,21 @@ export interface PreviewFacts {
     previewId: string;
     /** Script legible, con comentarios. */
     readableScript: string;
-    /** El texto exacto que se envía al servidor, incluido el envoltorio transaccional. */
+    /**
+     * El texto exacto que se envía al servidor, incluido el envoltorio transaccional.
+     *
+     * **Con una excepción, y es la razón de `secretCount`:** si el plan lleva contraseñas, aquí van
+     * como `N'<contraseña>'`. Es la única diferencia entre esto y lo que se envía, y existe porque la
+     * regla 11.3 prohíbe mostrar el valor. El panel lo dice en pantalla en lugar de callarlo: la
+     * regla 11.1 se cumple mostrando el texto, no fingiendo que no hay un hueco.
+     */
     exactBatch: string;
     statementCount: number;
     /** Nombre que habrá que escribir para confirmar, vacío si no hace falta. */
     typeToConfirm: string;
     production: boolean;
+    /** Cuántas contraseñas se pedirán al aplicar. 0 en la inmensa mayoría de los planes. */
+    secretCount: number;
 }
 
 /** Lo que el panel muestra después de ejecutar. */

@@ -2,7 +2,7 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
     Badge,
     Button,
@@ -10,9 +10,11 @@ import {
     createTableColumn,
     makeStyles,
 } from "@fluentui/react-components";
+import { AddRegular } from "@fluentui/react-icons";
 
 import { Login } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { CreatePrincipalDialog } from "./createPrincipalDialog";
 import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
@@ -34,6 +36,10 @@ const useStyles = makeStyles({
     action: {
         minWidth: "auto",
     },
+    rowActions: {
+        display: "flex",
+        gap: "4px",
+    },
 });
 
 /**
@@ -48,12 +54,14 @@ function isProtected(login: string): boolean {
     );
 }
 
-/** Logins del servidor (§8.1 del brief), en solo lectura. */
+/** Logins del servidor (§8.1 del brief). Desde M6 también se crean y se borran. */
 export const LoginsView = () => {
     const styles = useStyles();
     const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.logins);
     const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
+    const databases = useAdminPanelSelector((state) => state?.databases?.data) ?? [];
+    const [creating, setCreating] = useState(false);
 
     const columns = useMemo(
         () => [
@@ -163,36 +171,134 @@ export const LoginsView = () => {
                     );
                 },
             }),
+            // --- M6: restablecer la contraseña y borrar ---
+            createTableColumn<Login>({
+                columnId: "m6",
+                renderHeaderCell: () => Loc.logins.columns.manage,
+                renderCell: (login) => {
+                    const protectedLogin = isProtected(login.name);
+                    const resetStaged = pending.some(
+                        (change) =>
+                            change.kind === "resetPassword" && change.subject === login.name,
+                    );
+                    const dropStaged = pending.some(
+                        (change) => change.kind === "dropLogin" && change.subject === login.name,
+                    );
+                    // Restablecer la contraseña solo tiene sentido en un login de SQL Server: uno de
+                    // Windows la tiene en el dominio, no aquí.
+                    const canReset = login.type === "SQL_LOGIN";
+
+                    return (
+                        <div className={styles.rowActions}>
+                            <Button
+                                className={styles.action}
+                                size="small"
+                                appearance="subtle"
+                                disabled={!canReset || resetStaged}
+                                title={
+                                    !canReset
+                                        ? Loc.rowActions.windowsLoginPassword
+                                        : resetStaged
+                                          ? Loc.rowActions.staged
+                                          : undefined
+                                }
+                                aria-label={Loc.rowActions.resetPasswordAria(login.name)}
+                                onClick={() =>
+                                    context?.stageChange({
+                                        kind: "resetPassword",
+                                        login: login.name,
+                                        mustChange: false,
+                                        unlock: false,
+                                    })
+                                }>
+                                {Loc.rowActions.resetPassword}
+                            </Button>
+                            <Button
+                                className={styles.action}
+                                size="small"
+                                appearance="subtle"
+                                disabled={protectedLogin || dropStaged}
+                                title={
+                                    protectedLogin
+                                        ? Loc.rowActions.protectedLogin
+                                        : dropStaged
+                                          ? Loc.rowActions.staged
+                                          : Loc.rowActions.dropLoginWarning
+                                }
+                                aria-label={Loc.rowActions.dropLoginAria(login.name)}
+                                onClick={() =>
+                                    context?.stageChange({
+                                        kind: "dropLogin",
+                                        login: login.name,
+                                        createDate: login.createDate,
+                                    })
+                                }>
+                                {Loc.rowActions.dropUser}
+                            </Button>
+                        </div>
+                    );
+                },
+            }),
         ],
         [styles, context, pending],
     );
 
     return (
-        <DataTable<Login>
-            section={section}
-            columns={columns}
-            getRowId={(login) => login.sid || login.name}
-            getSearchText={(login) =>
-                [
-                    login.name,
-                    Loc.logins.kinds[login.type],
-                    login.defaultDatabase,
-                    ...login.serverRoles,
-                ].join(" ")
-            }
-            searchPlaceholder={Loc.logins.searchPlaceholder}
-            emptyMessage={Loc.logins.empty}
-            legend={Loc.logins.legend}
-            columnSizing={{
-                // Los nombres de login de Windows son largos y son lo que más se lee.
-                name: { minWidth: 240, defaultWidth: 300 },
-                type: { minWidth: 120, defaultWidth: 140 },
-                status: { minWidth: 100, defaultWidth: 120 },
-                defaultDatabase: { minWidth: 120, defaultWidth: 150 },
-                policy: { minWidth: 110, defaultWidth: 130 },
-                roles: { minWidth: 160, defaultWidth: 220 },
-                actions: { minWidth: 120, defaultWidth: 130 },
-            }}
-        />
+        <>
+            <DataTable<Login>
+                section={section}
+                columns={columns}
+                getRowId={(login) => login.sid || login.name}
+                getSearchText={(login) =>
+                    [
+                        login.name,
+                        Loc.logins.kinds[login.type],
+                        login.defaultDatabase,
+                        ...login.serverRoles,
+                    ].join(" ")
+                }
+                searchPlaceholder={Loc.logins.searchPlaceholder}
+                emptyMessage={Loc.logins.empty}
+                legend={Loc.logins.legend}
+                toolbar={
+                    <Button
+                        size="small"
+                        appearance="primary"
+                        icon={<AddRegular />}
+                        onClick={() => setCreating(true)}>
+                        {Loc.create.newButton}
+                    </Button>
+                }
+                columnSizing={{
+                    // Los nombres de login de Windows son largos y son lo que más se lee.
+                    name: { minWidth: 240, defaultWidth: 300 },
+                    type: { minWidth: 120, defaultWidth: 140 },
+                    status: { minWidth: 100, defaultWidth: 120 },
+                    defaultDatabase: { minWidth: 120, defaultWidth: 150 },
+                    policy: { minWidth: 110, defaultWidth: 130 },
+                    roles: { minWidth: 160, defaultWidth: 220 },
+                    actions: { minWidth: 120, defaultWidth: 130 },
+                    m6: { minWidth: 170, defaultWidth: 190 },
+                }}
+            />
+            <CreatePrincipalDialog
+                open={creating}
+                kind="login"
+                relatedOptions={[]}
+                secondaryOptions={databases.map((database) => database.name)}
+                onCancel={() => setCreating(false)}
+                onConfirm={(result) => {
+                    setCreating(false);
+                    context?.stageChange({
+                        kind: "createLogin",
+                        login: result.name,
+                        checkPolicy: result.checkPolicy,
+                        checkExpiration: result.checkExpiration,
+                        mustChange: result.mustChange,
+                        defaultDatabase: result.secondary || undefined,
+                    });
+                }}
+            />
+        </>
     );
 };

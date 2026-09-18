@@ -2,7 +2,7 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useContext, useMemo } from "react";
+import { useContext, useMemo, useState } from "react";
 import {
     Badge,
     Button,
@@ -10,9 +10,11 @@ import {
     createTableColumn,
     makeStyles,
 } from "@fluentui/react-components";
+import { AddRegular } from "@fluentui/react-icons";
 
 import { DatabaseUser } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { CreatePrincipalDialog } from "./createPrincipalDialog";
 import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
@@ -49,6 +51,9 @@ export const UsersView = () => {
     const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.users);
     const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
+    const logins = useAdminPanelSelector((state) => state?.logins?.data) ?? [];
+    const schemas = useAdminPanelSelector((state) => state?.schemas?.data) ?? [];
+    const [creating, setCreating] = useState(false);
 
     const columns = useMemo(
         () => [
@@ -153,25 +158,52 @@ export const UsersView = () => {
     );
 
     return (
-        <DataTable<DatabaseUser>
-            section={section}
-            columns={columns}
-            getRowId={(user) => user.name}
-            getSearchText={(user) =>
-                [user.name, user.loginName, user.defaultSchema, ...user.roles].join(" ")
-            }
-            searchPlaceholder={Loc.users.searchPlaceholder}
-            emptyMessage={Loc.users.empty}
-            legend={Loc.users.legend}
-            columnSizing={{
-                name: { minWidth: 180, defaultWidth: 220 },
-                type: { minWidth: 120, defaultWidth: 140 },
-                loginName: { minWidth: 150, defaultWidth: 180 },
-                defaultSchema: { minWidth: 140, defaultWidth: 160 },
-                authentication: { minWidth: 150, defaultWidth: 170 },
-                roles: { minWidth: 180, defaultWidth: 220 },
-                actions: { minWidth: 100, defaultWidth: 110 },
-            }}
-        />
+        <>
+            <DataTable<DatabaseUser>
+                section={section}
+                columns={columns}
+                getRowId={(user) => user.name}
+                getSearchText={(user) =>
+                    [user.name, user.loginName, user.defaultSchema, ...user.roles].join(" ")
+                }
+                searchPlaceholder={Loc.users.searchPlaceholder}
+                emptyMessage={Loc.users.empty}
+                legend={Loc.users.legend}
+                toolbar={
+                    <Button
+                        size="small"
+                        appearance="primary"
+                        icon={<AddRegular />}
+                        onClick={() => setCreating(true)}>
+                        {Loc.create.newButton}
+                    </Button>
+                }
+                columnSizing={{
+                    name: { minWidth: 180, defaultWidth: 220 },
+                    type: { minWidth: 120, defaultWidth: 140 },
+                    loginName: { minWidth: 150, defaultWidth: 180 },
+                    defaultSchema: { minWidth: 140, defaultWidth: 160 },
+                    authentication: { minWidth: 150, defaultWidth: 170 },
+                    roles: { minWidth: 180, defaultWidth: 220 },
+                    actions: { minWidth: 100, defaultWidth: 110 },
+                }}
+            />
+            <CreatePrincipalDialog
+                open={creating}
+                kind="user"
+                relatedOptions={logins.map((login) => login.name)}
+                secondaryOptions={schemas.map((schema) => schema.name)}
+                onCancel={() => setCreating(false)}
+                onConfirm={(result) => {
+                    setCreating(false);
+                    context?.stageChange({
+                        kind: "createUser",
+                        user: result.name,
+                        login: result.related || undefined,
+                        defaultSchema: result.secondary || undefined,
+                    });
+                }}
+            />
+        </>
     );
 };

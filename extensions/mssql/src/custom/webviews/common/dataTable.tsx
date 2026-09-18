@@ -122,6 +122,13 @@ export interface DataTableProps<T> {
     searchPlaceholder?: string;
     /** Leyenda alineada a la derecha de la barra de filtros (§14 del brief). */
     legend?: React.ReactNode;
+    /**
+     * Acciones de la sección, junto al recuento: el botón de crear, por ejemplo.
+     *
+     * Va aparte de `legend` a propósito: una leyenda es texto explicativo y un botón no lo es, así
+     * que meterlo ahí haría que un lector de pantalla lo anunciara como parte de la explicación.
+     */
+    toolbar?: React.ReactNode;
     /** Aviso encima de la rejilla, para explicar una lectura parcial. */
     notice?: React.ReactNode;
     /** Texto cuando la sección cargó pero no hay filas. */
@@ -146,6 +153,7 @@ export function DataTable<T>({
     getSearchText,
     searchPlaceholder,
     legend,
+    toolbar,
     notice,
     emptyMessage,
     columnSizing,
@@ -199,6 +207,7 @@ export function DataTable<T>({
                         ? Loc.common.countFiltered(filtered.length, items.length)
                         : Loc.common.count(items.length)}
                 </span>
+                {toolbar}
                 {legend && <span className={styles.legend}>{legend}</span>}
             </div>
 

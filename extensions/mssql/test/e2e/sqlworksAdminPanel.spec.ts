@@ -418,6 +418,11 @@ test.describe("SQLWorks - Panel de administración", () => {
         await expect(exactBatch).toContainText("IF @@TRANCOUNT > 0");
         await expect(exactBatch).toContainText("BEGIN CATCH");
 
+        // Se vuelve a plegar: el conmutador es estado del componente y **persiste** entre vistas
+        // previas, así que dejarlo abierto rompería el bloque de M6, que lo despliega otra vez.
+        await panel.getByRole("button", { name: "Ocultar el texto exacto" }).click();
+        await expect(panel.locator("pre")).toHaveCount(1);
+
         // --- El diálogo modal muestra el lote completo, y se cancela ---
         await panel.getByRole("button", { name: "Aplicar 2 cambios" }).click();
         const applyDialog = page.locator(".monaco-dialog-box");
@@ -492,6 +497,70 @@ test.describe("SQLWorks - Panel de administración", () => {
         await panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }).click();
         await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
         await expect(panel.getByRole("gridcell", { name: "analista", exact: true })).toBeVisible();
+
+        await panel.getByRole("button", { name: "Descartar todo" }).click();
+
+        // ------------------------------------------------------------------
+        // M6, regla 11.3: crear un login. La contraseña **no se pide en el formulario** y el script
+        // muestra un marcador de posición. Se cancela en la caja de la contraseña.
+        // ------------------------------------------------------------------
+        await openTab("Servidor", "Logins");
+        await panel.getByRole("button", { name: "Nuevo" }).click();
+
+        const createDialog = panel.getByRole("dialog");
+        await expect(createDialog).toBeVisible();
+        await expect(createDialog).toContainText("Crear un login de servidor");
+        // Lo que hace falta comprobar: el formulario **dice** por qué no hay campo de contraseña.
+        await expect(createDialog).toContainText(/La contraseña no se pide aquí/);
+        // Y de verdad no hay ninguna caja de contraseña en el formulario.
+        await expect(createDialog.locator('input[type="password"]')).toHaveCount(0);
+
+        await createDialog.getByRole("textbox").first().fill("e2e_login_nuevo");
+        await createDialog.getByRole("button", { name: "Añadir a los cambios pendientes" }).click();
+        await expect(panel.getByText("1 cambio pendiente")).toBeVisible();
+
+        await panel.getByRole("button", { name: "Revisar y aplicar" }).click();
+        const createScript = panel.locator("pre").first();
+        await expect(createScript).toContainText("CREATE LOGIN [e2e_login_nuevo]");
+        // El script muestra el hueco, no la contraseña, y el panel lo dice en pantalla.
+        await expect(createScript).toContainText("N'<contraseña>'");
+        await expect(
+            panel.getByText(/Donde dice «<contraseña>» irá la que escribas al aplicar/),
+        ).toBeVisible();
+
+        // El texto exacto que se envía también lleva el marcador de posición, no un valor.
+        await panel
+            .getByRole("button", { name: "Ver el texto exacto que se envía al servidor" })
+            .click();
+        const createExact = panel.locator("pre").nth(1);
+        await expect(createExact).toContainText(
+            "DECLARE @secreto1 nvarchar(128) = N'<contraseña>'",
+        );
+        // El escapado lo hace el motor, no el panel: por eso aparece QUOTENAME en el lote.
+        await expect(createExact).toContainText("QUOTENAME(@secreto1, '''')");
+
+        await panel.getByRole("button", { name: "Aplicar 1 cambio" }).click();
+        const createConfirm = page.locator(".monaco-dialog-box");
+        await expect(createConfirm).toBeVisible({ timeout: 30_000 });
+        await expect(createConfirm).toContainText("CREATE LOGIN [e2e_login_nuevo]");
+        // Se confirma a propósito, igual que antes: detrás tiene que estar la caja de la contraseña.
+        await createConfirm.getByRole("button", { name: "Aplicar 1 cambio" }).click();
+
+        const secretBox = page.locator(".quick-input-widget");
+        await expect(secretBox).toBeVisible({ timeout: 30_000 });
+        await expect(secretBox).toContainText(/Contraseña del login e2e_login_nuevo/);
+        await expect(secretBox).toContainText(/No se guarda en ningún sitio/);
+        // La caja oculta lo que se escribe: es una caja de contraseña de verdad.
+        await expect(secretBox.locator('input[type="password"]')).toHaveCount(1);
+        await page.keyboard.press("Escape");
+        await expect(secretBox).toBeHidden();
+
+        // Y el login NO se creó: cancelar en la caja de la contraseña no ejecuta nada.
+        await panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        await expect(
+            panel.getByRole("gridcell", { name: "e2e_login_nuevo", exact: true }),
+        ).toHaveCount(0);
 
         await panel.getByRole("button", { name: "Descartar todo" }).click();
     });

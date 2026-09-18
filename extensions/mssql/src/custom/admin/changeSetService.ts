@@ -28,8 +28,14 @@ export class ChangeSetService {
     }
 
     /** Ejecuta el lote transaccional y traduce el resultado. */
-    public async apply(plan: ExecutionPlan, changes: PendingChange[]): Promise<ChangeSetResult> {
-        const outcome = await this.gate.runPlan(plan);
+    public async apply(
+        plan: ExecutionPlan,
+        changes: PendingChange[],
+        secrets: readonly string[] = [],
+    ): Promise<ChangeSetResult> {
+        // Las contraseñas **pasan de largo**: llegan del controlador, se entregan al ejecutor y no se
+        // guardan en ningún campo de este servicio (regla 11.3 del brief).
+        const outcome = await this.gate.runPlan(plan, secrets);
         return toResult(outcome, changes);
     }
 }

@@ -199,6 +199,13 @@ export const PendingChangesDrawer = () => {
                         {showExact ? Loc.pendingChanges.hideExact : Loc.pendingChanges.showExact}
                     </Button>
                     {showExact && <pre className={styles.script}>{preview.exactBatch}</pre>}
+                    {preview.secretCount > 0 && (
+                        <MessageBar intent="info">
+                            <MessageBarBody>
+                                {Loc.pendingChanges.secretsInPlan(preview.secretCount)}
+                            </MessageBarBody>
+                        </MessageBar>
+                    )}
                     {preview.typeToConfirm && (
                         <MessageBar intent="warning">
                             <MessageBarBody>

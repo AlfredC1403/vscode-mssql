@@ -263,7 +263,29 @@ export type StageChangeRequest =
       }
     | { kind: "loginEnabled"; login: string; enabled: boolean; createDate: string }
     | { kind: "userDefaultSchema"; user: string; schema: string; createDate: string }
-    | { kind: "dropUser"; user: string; createDate: string };
+    | { kind: "dropUser"; user: string; createDate: string }
+    // --- M6: creación de principales. Ninguna lleva la contraseña: el host la pide al ejecutar. ---
+    | {
+          kind: "createLogin";
+          login: string;
+          checkPolicy: boolean;
+          checkExpiration: boolean;
+          mustChange: boolean;
+          defaultDatabase?: string;
+      }
+    | { kind: "resetPassword"; login: string; mustChange: boolean; unlock: boolean }
+    | { kind: "dropLogin"; login: string; createDate: string }
+    | {
+          kind: "createUser";
+          user: string;
+          /** Login al que se asigna. Vacío significa `WITHOUT LOGIN`. */
+          login?: string;
+          defaultSchema?: string;
+      }
+    | { kind: "createServerRole"; role: string; owner?: string }
+    | { kind: "createDatabaseRole"; role: string; owner?: string }
+    | { kind: "dropServerRole"; role: string }
+    | { kind: "dropDatabaseRole"; role: string };
 
 /** Clave del estado donde vive cada sección cargable. */
 export const SECTION_STATE_KEYS = {

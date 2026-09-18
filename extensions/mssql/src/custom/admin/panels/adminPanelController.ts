@@ -32,9 +32,9 @@ import {
     renderReadableScript,
     validatePlan,
 } from "../sql/ddl/plan";
-import { buildTransactionalBatch } from "../sql/writeGate";
+import { buildTransactionalBatch, secretRequirements } from "../sql/writeGate";
 import { stageRequestToStatement } from "./stageChange";
-import { confirmByTypingName, confirmPlan } from "./writeConfirm";
+import { confirmByTypingName, confirmPlan, promptForSecrets } from "./writeConfirm";
 import {
     ChangeSetResult,
     PendingChange,
@@ -414,7 +414,16 @@ export class AdminPanelController extends WebviewPanelController<
             }
         }
 
-        const result = await this.changeSet.apply(plan, state.pendingChanges);
+        // Las contraseñas se piden **al final**, cuando ya está todo confirmado, y no antes: así no
+        // hay un secreto en memoria mientras el usuario mira un diálogo, y si cancela en cualquier
+        // barrera anterior nunca se le ha pedido (regla 11.3 del brief).
+        const requirements = secretRequirements(plan.statements);
+        const secrets = requirements.length > 0 ? await promptForSecrets(requirements) : [];
+        if (secrets === undefined) {
+            return;
+        }
+
+        const result = await this.changeSet.apply(plan, state.pendingChanges, secrets);
         if (this.isDisposed) {
             return;
         }
@@ -741,9 +750,12 @@ function toPreviewFacts(plan: ExecutionPlan): PreviewFacts {
     return {
         previewId: plan.id,
         readableScript: renderReadableScript(plan),
+        // Sin secretos: el lote se construye con el **marcador de posición**, que es lo que se
+        // publica y lo que se ve. El valor real solo entra en la llamada que ejecuta (regla 11.3).
         exactBatch: buildTransactionalBatch(plan.statements),
         statementCount: plan.statements.length,
         typeToConfirm: plan.typeToConfirm ?? "",
         production: plan.production,
+        secretCount: secretRequirements(plan.statements).length,
     };
 }

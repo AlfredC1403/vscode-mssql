@@ -118,6 +118,17 @@ export const Strings = {
             "Es irreversible: SQL Server no permite estas sentencias dentro de una transacción, así que no hay vuelta atrás con un ROLLBACK.",
         /** Aviso extra de la regla 11.4, cuando el servidor está marcado como de producción. */
         productionWarning: "ATENCIÓN: este servidor está marcado como de producción.\n",
+        /** Cajas de contraseña de la regla 11.3. */
+        secretPrompt:
+            "No se guarda en ningún sitio: se usa solo para esta ejecución y no aparece en el script.",
+        secretRepeatPrompt: (subject: string) =>
+            `Escríbela otra vez para ${subject}. Si no coincide, no se ejecuta nada.`,
+        secretMismatch: "No coincide con la anterior.",
+        /** Aviso de la vista previa cuando el plan lleva contraseñas. */
+        secretsInPlan: (count: number) =>
+            count === 1
+                ? "El script muestra «<contraseña>» en su sitio: se pedirá al aplicar y no se guarda."
+                : `El script muestra «<contraseña>» en su sitio: se pedirán ${count} al aplicar y no se guardan.`,
         /** Caja de texto de la regla 11.5. */
         typeNameTitle: (what: string) => `Confirmar: escribe el nombre ${what}`,
         typeNamePrompt: (name: string) =>
@@ -148,6 +159,9 @@ export const Strings = {
             4621: "Ese permiso es de ámbito de servidor y solo se puede conceder desde master.",
             6115: "SQL Server no permite terminar una sesión dentro de una transacción.",
             15151: "El principal al que se refiere el cambio ya no existe, o no se puede ver con estos permisos.",
+            15025: "Ya existe un login, usuario o rol con ese nombre. No se creó nada.",
+            15099: "SQL Server no permite pedir el cambio de contraseña en el primer inicio de sesión si la caducidad está desactivada.",
+            15144: "Ese rol todavía tiene miembros, y SQL Server no borra un rol con miembros. Quita los miembros en el mismo conjunto de cambios y vuelve a aplicarlo.",
             50001: "El objeto ya no es el mismo que se leyó: se borró y se volvió a crear, o no existe.",
             50002: "La fila que se iba a cambiar ya no está como se leyó.",
             50003: "Alguien hizo ese cambio, o el contrario, mientras el panel estaba abierto.",

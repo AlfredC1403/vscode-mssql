@@ -9,12 +9,11 @@ import { assertIdentifier, quoteIdentifier } from "../../../util/identifiers";
  * Generadores para los cambios sobre principales que M5 entrega. Funciones puras que **abortan** si
  * un identificador no pasa la validación (regla 11.2 del brief).
  *
- * **Ninguno lleva contraseña, y eso es deliberado.** `CREATE LOGIN` y `ALTER LOGIN ... WITH PASSWORD`
- * se quedan para M6: la cláusula `PASSWORD` no acepta variable ni parámetro, y `query/simpleexecute`
- * no tiene canal de parámetros, así que el secreto tendría que viajar dentro del texto del lote. Eso
- * es compatible con la regla 11.3 —marcador en lo que se muestra, valor real solo al ejecutar— pero
- * obliga a que ese texto no se registre, no se publique en el estado y no se abra en un editor, y es
- * un trabajo propio que no cabe en este hito. El motivo es de **alcance**, no de imposibilidad.
+ * **Ninguno lleva contraseña.** `CREATE LOGIN` y `ALTER LOGIN ... WITH PASSWORD` viven en
+ * `createPrincipals.ts` desde M6, con el mecanismo de ranura de `secrets.ts`: la cláusula `PASSWORD`
+ * no acepta variable ni parámetro (error 102, medido) y `query/simpleexecute` no tiene canal de
+ * parámetros, así que el secreto viaja dentro del texto del lote y lo que se controla es quién lo ve
+ * y cuándo. Ver FORK.md §23.2.
  *
  * Las tres sentencias son plenamente transaccionales: medido contra SQL Server 2022, tras un
  * `ROLLBACK` el login vuelve a estar habilitado, el esquema por omisión vuelve al anterior y el

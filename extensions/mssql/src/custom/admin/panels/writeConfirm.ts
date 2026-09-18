@@ -5,6 +5,7 @@
 import * as vscode from "vscode";
 
 import { ExecutionPlan, renderReadableScript } from "../sql/ddl/plan";
+import { SecretRequirement, validateSecret } from "../sql/ddl/secrets";
 import { Strings } from "../../strings";
 
 /**
@@ -42,6 +43,57 @@ export async function confirmPlan(plan: ExecutionPlan): Promise<boolean> {
         action,
     );
     return chosen === action;
+}
+
+/**
+ * Pide las contraseñas que necesita el plan, en el mismo orden que las ranuras del lote.
+ *
+ * Es el único punto del fork donde existe una contraseña, y existe **solo durante esta llamada**:
+ * no entra en el estado del webview, ni en el objeto del plan, ni en `settings.json`, ni en el
+ * almacén de credenciales (regla 11.3 del brief). Quien reciba el array lo usa para construir el
+ * lote y lo suelta.
+ *
+ * Devuelve `undefined` si la persona cancela cualquiera de las cajas: entonces no se ejecuta nada.
+ *
+ * La caja pide la contraseña **dos veces** y compara. Sin eso, una errata en una contraseña que no
+ * se ve crearía un login al que nadie puede entrar, y habría que restablecerla para descubrirlo.
+ */
+export async function promptForSecrets(
+    requirements: readonly SecretRequirement[],
+): Promise<string[] | undefined> {
+    const collected: string[] = [];
+
+    for (const [index, requirement] of requirements.entries()) {
+        const position = requirements.length > 1 ? ` (${index + 1} de ${requirements.length})` : "";
+
+        const first = await vscode.window.showInputBox({
+            title: `${requirement.prompt}${position}`,
+            prompt: Strings.writeGate.secretPrompt,
+            password: true,
+            ignoreFocusOut: true,
+            validateInput: (value) => validateSecret(value),
+        });
+        if (first === undefined) {
+            return undefined;
+        }
+
+        const second = await vscode.window.showInputBox({
+            title: `Repite la contraseña${position}`,
+            prompt: Strings.writeGate.secretRepeatPrompt(requirement.subject),
+            password: true,
+            ignoreFocusOut: true,
+            // Se compara aquí, dentro de la caja, para poder avisar sin perder lo escrito.
+            validateInput: (value) =>
+                value === first ? undefined : Strings.writeGate.secretMismatch,
+        });
+        if (second === undefined || second !== first) {
+            return undefined;
+        }
+
+        collected.push(first);
+    }
+
+    return collected;
 }
 
 /**
