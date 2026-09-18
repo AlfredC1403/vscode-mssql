@@ -9,6 +9,11 @@ import {
     ReferencedRowRequestParams,
     ReferencedRowResult,
 } from "../custom/sharedInterfaces/referencedRow";
+// [FORK] Tipos de «editar estos resultados» (§33).
+import {
+    EditQueryResultsOutcome,
+    EditQueryResultsParams,
+} from "../custom/sharedInterfaces/editQueryResults";
 import {
     ExecutionPlanReducers,
     ExecutionPlanState,
@@ -587,5 +592,13 @@ export enum GridContextMenuAction {
 export namespace ShowReferencedRowRequest {
     export const type = new RequestType<ReferencedRowRequestParams, ReferencedRowResult, void>(
         "sqlworksShowReferencedRow",
+    );
+}
+
+// [FORK] Petición del fork: abrir el editor de datos sobre la consulta que produjo el conjunto.
+// Los tipos viven en src/custom/sharedInterfaces/editQueryResults.ts. FORK.md §33.
+export namespace EditQueryResultsRequest {
+    export const type = new RequestType<EditQueryResultsParams, EditQueryResultsOutcome, void>(
+        "sqlworksEditQueryResults",
     );
 }

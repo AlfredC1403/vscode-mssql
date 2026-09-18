@@ -69,6 +69,10 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/src/webviews/pages/TableExplorer/TableExplorerToolbar.tsx` | **§32**: el botón «Save Changes» **sustituido** por el par confirmar/descartar, más el `import` y la propiedad `onDiscard` | Es justo lo que se pidió cambiar: un disquete gris entre nueve iconos grises, sin cuenta y sin la otra mitad (§32.1). Único sitio del upstream sustituido en §32 | §32 |
 | `extensions/mssql/src/webviews/pages/TableExplorer/TableDataGrid.tsx` | **§32, 2 añadidos**: `revertAllPendingRows()` en el ref de la rejilla y el `import` de `pendingRowIds` | La cuenta y el resaltado son de la rejilla, en refs propias: revertir desde fuera devolvía los valores y dejaba la barra diciendo «(2)» (§32.3). **Ninguna línea del upstream sustituida** | §32 |
 | `extensions/mssql/src/webviews/pages/TableExplorer/TableExplorerPage.tsx` | **§32, 5 líneas**: `handleDiscard`, que llama a la rejilla, y su paso a la barra | Es quien tiene el ref de la rejilla. **Ninguna línea del upstream sustituida** | §32 |
+| `extensions/mssql/src/tableExplorer/tableExplorerWebViewController.ts` | **§33, 3 líneas**: un parámetro opcional `_initialQuery` en el constructor, que pasa a `edit/initialize` y al panel de SQL | Es lo que ata la sesión de edición a la consulta del usuario en lugar de a la tabla entera (§33.1). Opcional: sin él todo sigue igual. **Ninguna línea del upstream sustituida** | §33 |
+| `extensions/mssql/src/sharedInterfaces/queryResult.ts` | **§33**: el tipo de petición `EditQueryResultsRequest` y el `import` de los tipos del fork | Mismo motivo que §31: la rejilla del upstream es quien la manda | §33 |
+| `extensions/mssql/src/queryResult/queryResultWebViewController.ts` | **§33, 14 líneas**: el `import` y el manejador, que saca del `QueryRunner` el rango del lote | Su controlador es el único que ve el `QueryRunner`, que es quien sabe qué texto produjo cada conjunto (§33.3) | §33 |
+| `extensions/mssql/src/webviews/pages/QueryResult/queryResultFluentResultGrid.tsx` | **§33**: la contribución `sqlworks.editQueryResults` al menú de celda y su caso | Igual que §31: la rejilla admite comandos de terceros por diseño | §33 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -145,6 +149,9 @@ el upstream pone sus funciones puras compartidas.
 | `extensions/mssql/src/custom/webviews/TableExplorer/pendingChangesButtons.tsx` | El par confirmar (verde) / descartar (rojo) de la barra del editor de datos (§32.2)                                                                                                                                                                          |
 | `extensions/mssql/src/custom/webviews/TableExplorer/pendingChanges.ts`         | Qué filas hay que revertir para descartarlo todo, y en qué orden. Sin React, para que lo alcancen los unitarios (§32.3)                                                                                                                                      |
 | `extensions/mssql/test/unit/custom/pendingChanges.test.ts`                     | Fija ese conjunto y ese orden: es lo único de §32 que se puede equivocar en silencio                                                                                                                                                                         |
+| `extensions/mssql/src/custom/results/editQueryResults.ts`                      | Abre el editor de datos sobre la consulta que produjo unos resultados, si salen de una sola tabla (§33)                                                                                                                                                      |
+| `extensions/mssql/src/custom/sharedInterfaces/editQueryResults.ts`             | Los tipos de esa petición, que la rejilla del upstream también importa                                                                                                                                                                                       |
+| `extensions/mssql/test/unit/custom/editQueryResults.test.ts`                   | Fija de qué tabla salen unos resultados: pasarse de estricto deja fuera consultas editables, quedarse corto abre un editor que el servidor rechaza                                                                                                           |
 | `FORK.md`                                                                      | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
@@ -3670,3 +3677,113 @@ exactamente lo que se pidió cambiar), y tres archivos suyos con añadidos marca
 - **No pregunta antes de descartar** (§32.4).
 - **No cambia la rejilla de resultados de consulta**, que no tiene sesión de edición detrás: allí
   editar en línea es otro problema, no un botón. Ver §33.
+
+## 33. Editar en línea los resultados de una consulta
+
+Del §32: «pero solo funciona para el table explorer; si hago un query y lo ejecuto, no funciona el
+inline editor».
+
+Cierto, y esa era la mitad que faltaba. El editor en línea existía solo colgando del árbol de
+objetos, sobre una tabla entera. Quien ejecuta `SELECT … WHERE …` y quiere corregir tres celdas de
+lo que está mirando no tenía camino: copiar los valores, escribir un `UPDATE` y ejecutarlo.
+
+### 33.1. Lo que hace el fork
+
+Clic derecho en la rejilla de resultados → **«Editar estos resultados»**. Se abre el editor de datos
+—el mismo del §32, con su par confirmar/descartar— **atado a la consulta que se ejecutó**.
+
+No a la tabla entera: a la consulta. Si se ejecutó
+`SELECT NavigationId, DSHB_Title, Icono FROM dbo.DSHB_NavigationNodes WHERE NavigationId >= 2`, el
+editor abre esas tres columnas y esas dos filas. El filtro y el orden que escribió el usuario siguen
+puestos, que es de lo que se trata: abrir `SELECT TOP 100 *` de la tabla sería otro conjunto de
+filas y habría que volver a filtrar a mano.
+
+### 33.2. Por qué esto no fue rehacer la rejilla de resultados
+
+La opción obvia —hacer editable la rejilla de resultados en su sitio, sin abrir nada— es mucho más
+cara de lo que parece, y la razón es de fondo: **la rejilla de resultados no tiene detrás una sesión
+de edición**. Se llena con `query/subset`, que devuelve filas de una ejecución ya terminada, sin
+identidad de fila ni forma de volver a escribirlas. El editor de datos se llena con `edit/subset`,
+que es otra cosa: una sesión abierta contra una tabla, con identificadores de fila, `edit/updateCell`
+y `edit/commit`.
+
+Hacer editable la rejilla es montar la segunda debajo de la primera y casar fila a fila dos
+conjuntos que el servidor devolvió por caminos distintos, con su paginación, su orden y sus filtros
+propios. Es un proyecto, y con un modo de fallar especialmente malo: escribir en la fila equivocada.
+
+Lo que sí ofrece el STS es un `queryString` en `edit/initialize`: **una sesión de edición atada a
+una consulta**. Y el Table Explorer ya lo usa —es como aplica sus propios filtros—. Así que el
+camino corto no es un apaño: es el mecanismo que ya existe, abierto desde donde faltaba.
+
+### 33.3. De dónde sale el texto exacto de la consulta
+
+Del documento, por el rango del lote. El `QueryRunner` del upstream guarda en cada `BatchSummary` la
+`selection` —línea y columna de inicio y fin— del lote que ejecutó, así que el texto es **el que se
+ejecutó**, no una reconstrucción ni una adivinanza. Es una mejora sobre lo que hace §31, que prueba
+los lotes del último al primero porque el globo no sabe de qué lote venía la celda.
+
+Si no hay rango se usa el documento entero, que es lo correcto cuando el documento es una sola
+sentencia.
+
+### 33.4. Qué se comprueba antes de abrir
+
+Una sesión de edición es **de una tabla**. Antes de abrir nada se le pregunta al servidor de qué
+tablas salen las columnas, con el mismo `sys.dm_exec_describe_first_result_set` del §31.2:
+
+| Lo que devuelve el servidor           | Qué pasa                                          |
+| ------------------------------------- | ------------------------------------------------- |
+| Todas las columnas de una misma tabla | Se abre el editor sobre ella, atado a la consulta |
+| Columnas de varias tablas (una unión) | No se abre nada y se dice de qué tablas salen     |
+| Ninguna columna sale de una tabla     | No se abre nada: agregados, literales, calculadas |
+| El servidor no pudo describir el lote | No se abre nada y se da su mensaje                |
+
+**Las columnas sin tabla no cuentan como «otra tabla»**, y esto importa más de lo que parece:
+`SELECT id, nombre, GETDATE() AS ahora FROM cliente` es perfectamente editable, y contar la columna
+calculada como una segunda tabla dejaría fuera media docena de consultas corrientes.
+
+Se podría abrir siempre y dejar que fallara el STS. Pero entonces el usuario ve una pestaña vacía
+con un error del servidor en inglés, en lugar de una frase que dice por qué su consulta no se puede
+editar.
+
+### 33.5. El nodo que no existe
+
+El controlador del Table Explorer del upstream espera un nodo del árbol de objetos. Aquí no hay
+ninguno: el resultado viene de una consulta escrita a mano, y esa tabla puede estar sin desplegar en
+el árbol, o el árbol cerrado. Así que el nodo se arma con lo único que el controlador le pide —el
+nombre, el esquema, el tipo, el perfil de conexión y un padre que diga la base—, en lugar de buscar
+en el árbol algo que puede no estar cargado.
+
+### 33.6. Verificación
+
+| Qué                                           | Estado                                         |
+| --------------------------------------------- | ---------------------------------------------- |
+| Unitarios nuevos (`editQueryResults.test.ts`) | ✅ 6, sobre de qué tabla salen unos resultados |
+| Suite completa                                | ✅ sin regresiones                             |
+| Contra SQL Server real, en el VS Code real    | ✅ los dos caminos, ver abajo                  |
+| `lint` y los dos typechecks                   | ✅                                             |
+
+De punta a punta contra la instancia de §28.2:
+
+- **Se puede editar**: ejecutada
+  `SELECT NavigationId, DSHB_Title, Icono FROM dbo.DSHB_NavigationNodes WHERE NavigationId >= 2`,
+  clic derecho → «Editar estos resultados» abre el editor con **esas tres columnas y esas dos
+  filas** («1 - 2 of 2»). Se edita una celda, se pulsa confirmar, sale «Changes saved successfully»
+  y un `SELECT` desde fuera de VS Code devuelve el valor nuevo.
+- **No se puede editar**: ejecutada una unión de `DSHB_Widget` con `DSHB_NavigationNodes`, el mismo
+  menú no abre nada y avisa: «Estos resultados salen de varias tablas (dbo.DSHB_Widget,
+  dbo.DSHB_NavigationNodes) y el editor trabaja sobre una».
+
+Coste en deuda de merge: **ninguna línea del upstream sustituida**. Cuatro archivos suyos con
+añadidos marcados con `// [FORK]`, y de ellos el único con lógica es un parámetro opcional en el
+constructor del Table Explorer: sin él, todo sigue exactamente como estaba.
+
+### 33.7. Lo que esto deliberadamente no hace
+
+- **No hace editable la rejilla de resultados en su sitio** (§33.2). Se abre el editor, que es una
+  pestaña más. Si algún día se quiere en el mismo panel, el trabajo está en casar las dos sesiones,
+  no en este comando.
+- **No intenta editar uniones** partiendo el resultado por tablas. Se dice que no y ya.
+- **No trae más filas de las que trae el editor**: las primeras 100, como al abrirlo desde el árbol.
+  El desplegable de la barra sigue mandando.
+- **No aparece deshabilitado cuando el conjunto no es editable.** Saberlo de antemano es una consulta
+  al servidor por cada menú que se abre; se prefiere abrir el menú al instante y explicar al pulsar.

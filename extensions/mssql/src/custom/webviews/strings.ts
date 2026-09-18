@@ -534,6 +534,11 @@ export const WebviewStrings = {
         confirmTooltip: "Aplica los cambios pendientes en el servidor",
         discardTooltip: "Descarta los cambios pendientes. No toca el servidor",
     },
+    /** Editar en línea los resultados de una consulta (§33). */
+    editQueryResults: {
+        /** La entrada del menú contextual de la rejilla de resultados. */
+        menuItem: "Editar estos resultados",
+    },
     /** El registro al que apunta una clave ajena (§31). */
     referencedRow: {
         title: "Registro referenciado",

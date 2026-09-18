@@ -7,6 +7,8 @@ import * as vscode from "vscode";
 import * as qr from "../sharedInterfaces/queryResult";
 // [FORK] §31.
 import { showReferencedRow } from "../custom/results/referencedRow";
+// [FORK] §33.
+import { editQueryResults, explainOutcome } from "../custom/results/editQueryResults";
 import * as Constants from "../constants/constants";
 import * as LocalizedConstants from "../constants/locConstants";
 import { WebviewViewController } from "../controllers/webviewViewController";
@@ -305,6 +307,20 @@ export class QueryResultWebviewController extends WebviewViewController<
         // clave ajena y el panel viven en src/custom/results/referencedRow.ts. FORK.md §31.
         this.onRequest(qr.ShowReferencedRowRequest.type, async (message) => {
             return await showReferencedRow(message);
+        });
+
+        // [FORK] «Editar estos resultados»: abre el editor de datos sobre la consulta que produjo
+        // el conjunto. El rango del lote lo sabe el QueryRunner, y con él sale el texto exacto de
+        // la consulta. Ver src/custom/results/editQueryResults.ts. FORK.md §33.
+        this.onRequest(qr.EditQueryResultsRequest.type, async (message) => {
+            const batch = this._sqlOutputContentProvider.getQueryRunner(message.ownerUri)
+                ?.batchSets?.[message.batchId];
+            const outcome = await editQueryResults(message, batch?.selection);
+            const warning = explainOutcome(outcome);
+            if (warning) {
+                void vscode.window.showWarningMessage(warning);
+            }
+            return outcome;
         });
 
         this.onRequest(qr.OpenInNewTabRequest.type, async (message) => {

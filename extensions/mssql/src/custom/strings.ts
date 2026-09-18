@@ -278,6 +278,17 @@ export const Strings = {
         unknownSource: (column: string) =>
             `No se pudo averiguar de qué tabla sale la columna ${column}. Suele pasar con columnas calculadas, o cuando lo ejecutado no es una consulta simple: prueba a ejecutar solo el SELECT.`,
     },
+    /** Editar en línea los resultados de una consulta (§33). */
+    editQueryResults: {
+        noQuery: "SQLWorks no pudo recuperar el texto de la consulta que produjo estos resultados.",
+        noSource:
+            "Estos resultados no salen de ninguna tabla, así que no se pueden editar. Pasa con los agregados, los literales y las columnas calculadas.",
+        severalTables: (tables: string) =>
+            `Estos resultados salen de varias tablas (${tables}) y el editor trabaja sobre una. Prueba con una consulta sobre una sola tabla.`,
+        notConnected: "Este documento no tiene conexión, así que no hay nada que editar.",
+        error: (detail: string) =>
+            `SQLWorks no pudo abrir el editor sobre estos resultados. ${detail}`,
+    },
     /** El selector de servidor y base de datos de la barra de estado (§30). */
     connectionSelector: {
         /** Sin conexión en este documento. */

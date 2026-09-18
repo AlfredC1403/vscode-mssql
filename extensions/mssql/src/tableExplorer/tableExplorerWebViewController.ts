@@ -43,6 +43,15 @@ export class TableExplorerWebViewController extends WebviewPanelController<
         private _tableExplorerService: ITableExplorerService,
         private _connectionManager: ConnectionManager,
         private _targetNode: TreeNodeInfo,
+        /**
+         * [FORK] La consulta con la que abrir la sesión de edición, en lugar de la tabla entera.
+         *
+         * Es lo que permite editar los resultados de una consulta escrita a mano conservando su
+         * filtro y su orden: `edit/initialize` ya acepta un `queryString` —el propio editor lo usa
+         * al filtrar—, así que esto solo lo pasa desde el principio. Opcional: sin ella todo sigue
+         * igual, que es como lo abre el árbol de objetos. Ver FORK.md §33.
+         */
+        private _initialQuery?: string,
     ) {
         const tableName = _targetNode?.metadata?.name || "Table";
         const schemaName = _targetNode?.metadata?.schema;
@@ -222,12 +231,16 @@ export class TableExplorerWebViewController extends WebviewPanelController<
                 }
             }
 
+            // [FORK] §33: si se abrió sobre una consulta, el panel de SQL tiene que enseñar **esa**
+            // consulta y no el SELECT por omisión. `loadResultSet` lee esto al cargar las filas.
+            this._pendingTableQuery = this._initialQuery;
+
             await this._tableExplorerService.initialize(
                 ownerUri,
                 objectName,
                 schemaName ?? "",
                 objectType,
-                undefined,
+                this._initialQuery,
             );
 
             this.logger.debug(

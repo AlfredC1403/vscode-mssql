@@ -25,8 +25,9 @@ import {
     useReferencedRowPopover,
 } from "../../../custom/webviews/ReferencedRow/referencedRowPopover";
 
-/** [FORK] Id del comando del fork. La rejilla pide que los de terceros lleven prefijo. */
+/** [FORK] Ids de los comandos del fork. La rejilla pide que los de terceros lleven prefijo. */
 const FORK_SHOW_REFERENCED_ROW = "sqlworks.showReferencedRow";
+const FORK_EDIT_QUERY_RESULTS = "sqlworks.editQueryResults";
 import { useVscodeWebview } from "../../common/vscodeWebviewProvider";
 import {
     ColorThemeKind,
@@ -260,6 +261,15 @@ function getQueryResultFluentGridCommandConfiguration(): FluentResultGridCommand
                 placements: [placement.CellContextMenu],
                 groupId: "sqlworks",
                 order: 400,
+            },
+            // [FORK] Editar en línea estos resultados: abre el editor de datos sobre la consulta
+            // que los produjo, con su filtro y su orden puestos. FORK.md §33.
+            {
+                id: FORK_EDIT_QUERY_RESULTS,
+                label: CustomStrings.editQueryResults.menuItem,
+                placements: [placement.CellContextMenu],
+                groupId: "sqlworks",
+                order: 410,
             },
             {
                 id: FluentResultGridCommand.CopyHeaders,
@@ -733,6 +743,16 @@ const QueryResultFluentResultGrid = forwardRef<ResultGridHandle, ResultGridProps
                     );
                     break;
                 }
+                // [FORK] §33. El host resuelve de qué tabla salen estos resultados, recupera el
+                // texto exacto del lote y abre el editor de datos sobre esa consulta. Si no se
+                // puede, el propio host explica por qué; aquí no hay nada que pintar.
+                case FORK_EDIT_QUERY_RESULTS:
+                    await context.extensionRpc.sendRequest(qr.EditQueryResultsRequest.type, {
+                        ownerUri: uri,
+                        batchId: event.batchId,
+                        resultId: event.resultId,
+                    });
+                    break;
                 case FluentResultGridCommand.CopySelection:
                     await context.extensionRpc.sendRequest(qr.CopySelectionRequest.type, {
                         uri,

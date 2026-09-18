@@ -9,6 +9,7 @@ import { TreeNodeInfo } from "../objectExplorer/nodes/treeNodeInfo";
 import { AdminPanelController } from "./admin/panels/adminPanelController";
 import { ConnectionSelector } from "./connection/connectionSelector";
 import { useConnectionManager } from "./results/referencedRow";
+import { useEditQueryResultsHost } from "./results/editQueryResults";
 import { SnippetCompletionProvider } from "./snippets/completion";
 import { SnippetsViewController } from "./snippets/snippetsViewController";
 import { FormatProfilesController } from "./format/formatProfilesController";
@@ -129,6 +130,13 @@ export function registerCustom(
     // Lo dispara el menú contextual de la rejilla de resultados, cuyo controlador es del upstream y
     // **no recibe el gestor de conexiones**. Se lo dejamos aquí. Ver `results/referencedRow.ts`.
     useConnectionManager(connectionManager);
+
+    // --- §33: editar en línea los resultados de una consulta ---
+    //
+    // Mismo motivo y mismo patrón: lo dispara el menú de la rejilla del upstream, y hace falta el
+    // gestor de conexiones y el contexto para abrir el editor de datos. Ver
+    // `results/editQueryResults.ts`.
+    useEditQueryResultsHost(context, connectionManager);
 
     // --- §30: el selector de conexión, siempre a la vista ---
     //
