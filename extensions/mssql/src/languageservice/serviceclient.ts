@@ -46,6 +46,11 @@ import { TelemetryActions, TelemetryViews } from "../sharedInterfaces/telemetry"
 import { PrivatePreviewFeature, previewService } from "../previews/previewService";
 import { getRuntimeConfigPath, ServiceExecutable } from "./serviceExecutablePaths";
 import { config } from "../configurations/config";
+// [FORK] Sugerencias sin distinguir mayúsculas y por cualquier parte del nombre (FORK.md §28).
+import {
+    keepCompletionRange,
+    provideFlexibleCompletions,
+} from "../custom/intellisense/completionMiddleware";
 
 const STS_OVERRIDE_ENV_VAR = "MSSQL_SQLTOOLSSERVICE";
 const SERVICE_LAUNCH_TELEMETRY_VIEW = TelemetryViews.ServiceClient;
@@ -469,7 +474,16 @@ export default class SqlToolsServiceClient {
             errorHandler: new LanguageClientErrorHandler(Constants.sqlToolsServiceName),
             middleware: {
                 provideCompletionItem: async (document, position, context, token, next) => {
-                    const result = await next(document, position, context, token);
+                    // [FORK] El filtro de sugerencias del STS distingue mayúsculas y solo encaja
+                    // desde la primera letra. Ver src/custom/intellisense/completionMiddleware.ts
+                    // y FORK.md §28.
+                    const result = await provideFlexibleCompletions(
+                        document,
+                        position,
+                        context,
+                        token,
+                        next,
+                    );
                     const count = Array.isArray(result)
                         ? result.length
                         : (result?.items?.length ?? 0);
@@ -485,6 +499,8 @@ export default class SqlToolsServiceClient {
                     }
                     return result;
                 },
+                // [FORK] Resolver una sugerencia no puede mover el rango con el que se mostró.
+                resolveCompletionItem: keepCompletionRange,
             },
         };
 
