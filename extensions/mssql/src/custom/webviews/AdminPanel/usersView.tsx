@@ -2,11 +2,18 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useMemo } from "react";
-import { Badge, TableCellLayout, createTableColumn, makeStyles } from "@fluentui/react-components";
+import { useContext, useMemo } from "react";
+import {
+    Badge,
+    Button,
+    TableCellLayout,
+    createTableColumn,
+    makeStyles,
+} from "@fluentui/react-components";
 
 import { DatabaseUser } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
 
@@ -24,6 +31,10 @@ const useStyles = makeStyles({
     count: {
         fontVariantNumeric: "tabular-nums",
     },
+    action: {
+        minWidth: "auto",
+        color: "var(--vscode-errorForeground)",
+    },
 });
 
 /** Texto de autenticación, con respaldo para un valor que el motor añada en el futuro. */
@@ -35,7 +46,9 @@ function authenticationLabel(value: string): string {
 /** Usuarios de la base de datos seleccionada (§8.3.1 del brief), en solo lectura. */
 export const UsersView = () => {
     const styles = useStyles();
+    const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.users);
+    const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
 
     const columns = useMemo(
         () => [
@@ -100,8 +113,43 @@ export const UsersView = () => {
                     </TableCellLayout>
                 ),
             }),
+            createTableColumn<DatabaseUser>({
+                columnId: "actions",
+                renderHeaderCell: () => Loc.sessions.columns.actions,
+                renderCell: (user) => {
+                    const staged = pending.some(
+                        (change) => change.kind === "dropUser" && change.subject === user.name,
+                    );
+
+                    return (
+                        <Button
+                            className={styles.action}
+                            size="small"
+                            appearance="subtle"
+                            // dbo, guest, sys e INFORMATION_SCHEMA los crea SQL Server: no se borran.
+                            disabled={user.system || staged}
+                            title={
+                                user.system
+                                    ? Loc.rowActions.systemObject
+                                    : staged
+                                      ? Loc.rowActions.staged
+                                      : Loc.rowActions.dropUserWarning
+                            }
+                            aria-label={Loc.rowActions.dropUserAria(user.name)}
+                            onClick={() =>
+                                context?.stageChange({
+                                    kind: "dropUser",
+                                    user: user.name,
+                                    createDate: user.createDate,
+                                })
+                            }>
+                            {Loc.rowActions.dropUser}
+                        </Button>
+                    );
+                },
+            }),
         ],
-        [styles],
+        [styles, context, pending],
     );
 
     return (
@@ -121,7 +169,8 @@ export const UsersView = () => {
                 loginName: { minWidth: 150, defaultWidth: 180 },
                 defaultSchema: { minWidth: 140, defaultWidth: 160 },
                 authentication: { minWidth: 150, defaultWidth: 170 },
-                roles: { minWidth: 200, defaultWidth: 260 },
+                roles: { minWidth: 180, defaultWidth: 220 },
+                actions: { minWidth: 100, defaultWidth: 110 },
             }}
         />
     );

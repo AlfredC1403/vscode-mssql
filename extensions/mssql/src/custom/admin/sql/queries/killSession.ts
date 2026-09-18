@@ -4,6 +4,7 @@
 
 import { SimpleExecuteResult } from "vscode-mssql";
 import { ActiveSession, KillPermissions, SessionSnapshot } from "../types";
+import { PlannedStatement } from "../ddl/plan";
 import { toRows } from "../rows";
 
 /**
@@ -79,6 +80,18 @@ function assertSessionId(sessionId: number): number {
  */
 export function buildKillStatement(sessionId: number): string {
     return `KILL ${assertSessionId(sessionId)};`;
+}
+
+/**
+ * La misma sentencia como paso de un plan, para que salga por la puerta de escritura.
+ *
+ * Va sin punto y coma —lo pone el ejecutor— y **sin base de datos**: las sentencias sueltas no se
+ * enrutan con `sp_executesql`, se ejecutan tal cual en el contexto de la conexión.
+ *
+ * @throws Si `sessionId` no es un entero positivo.
+ */
+export function buildKillPlanStatement(sessionId: number, label: string): PlannedStatement {
+    return { label, sql: `KILL ${assertSessionId(sessionId)}` };
 }
 
 /**

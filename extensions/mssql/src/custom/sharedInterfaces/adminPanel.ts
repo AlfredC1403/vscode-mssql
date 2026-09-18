@@ -10,6 +10,7 @@
  */
 
 import { CustomWebviewKind, CustomWebviewStateBase } from "./customWebview";
+import { ChangeSetResult, PendingChange, PreviewFacts, ProductionState } from "./pendingChanges";
 import {
     ActiveSession,
     DatabaseChoice,
@@ -34,6 +35,14 @@ export interface ConnectionTarget {
     authenticationType: string;
     /** Nombre del perfil guardado, si tiene uno. */
     profileName?: string;
+    /**
+     * Identificador del perfil de conexión, que es su identidad estable: `AGENTS.md` del upstream
+     * prohíbe comparar conexiones por propiedades de presentación.
+     *
+     * **Solo lo tienen los perfiles guardados**: el upstream lo asigna al guardar. Una conexión
+     * escrita a mano no tiene, y por eso la marca de producción admite además patrones de nombre.
+     */
+    profileId?: string;
     /** Usuario, solo cuando la autenticación es SQL. */
     userName?: string;
     /** Versión completa del motor, de la información que devolvió la conexión. */
@@ -153,6 +162,19 @@ export interface AdminPanelState extends CustomWebviewStateBase {
     databaseRoles: SectionState<DatabaseRole[]>;
     schemas: SectionState<SchemaInfo[]>;
     databasePermissions: SectionState<PermissionMatrixData>;
+
+    // --- Cambios pendientes (M5) ---
+    /** Cambios montados y sin ejecutar, en el orden en que se montaron. */
+    pendingChanges: PendingChange[];
+    /**
+     * Vista previa del plan, con su nonce. `undefined` mientras no se haya pedido, y se invalida en
+     * cuanto la lista cambia: así el webview no puede ejecutar un plan que ya no corresponde.
+     */
+    preview?: PreviewFacts;
+    /** Resultado de la última ejecución, para pintar el estado por cambio. */
+    lastResult?: ChangeSetResult;
+    /** Marca de producción del objetivo (regla 11.4 del brief). */
+    productionState?: ProductionState;
 }
 
 /**
@@ -178,7 +200,70 @@ export interface AdminPanelReducers {
      * solo el nombre con el que se construyen las consultas de catálogo.
      */
     selectDatabase: { database: string };
+
+    // --- Cambios pendientes (M5) ---
+    /**
+     * Monta un cambio en la lista de pendientes. **No ejecuta nada**: el webview manda los datos del
+     * cambio y el host construye la sentencia con sus generadores, que validan y abortan.
+     */
+    stageChange: { request: StageChangeRequest };
+    /** Quita un cambio de la lista. */
+    unstageChange: { id: string };
+    /** Vacía la lista. */
+    clearChanges: Record<string, never>;
+    /** Calcula la vista previa del plan y la publica con su nonce. */
+    buildPreview: Record<string, never>;
+    /**
+     * Ejecuta el plan. El webview manda **solo el nonce**, nunca T-SQL: así lo que se ejecuta es, por
+     * construcción, lo que se mostró (regla 11.1 del brief).
+     */
+    applyChanges: { previewId: string };
+    /** Abre el script legible en un editor sin título, para revisarlo o guardarlo. */
+    copyScriptToEditor: Record<string, never>;
 }
+
+/**
+ * Lo que el webview manda para montar un cambio: **datos, no T-SQL**.
+ *
+ * Es una unión por `kind`, y el host la traduce con los generadores de `admin/sql/ddl/`, que son los
+ * únicos que construyen sentencias.
+ */
+export type StageChangeRequest =
+    | {
+          kind: "serverPermission";
+          action: "GRANT" | "GRANT_WITH_GRANT_OPTION" | "DENY" | "REVOKE";
+          permission: string;
+          principal: string;
+          /** Estado que se leyó, para la precondición. */
+          currentState: "G" | "D" | "W" | "NONE";
+          grantable?: boolean;
+      }
+    | {
+          kind: "databasePermission";
+          action: "GRANT" | "GRANT_WITH_GRANT_OPTION" | "DENY" | "REVOKE";
+          permission: string;
+          principal: string;
+          /** Clase tal como la muestra M4. Las que M5 no sabe expresar se rechazan con motivo. */
+          securableClass: string;
+          securable: string;
+          columnName?: string;
+          grantable?: boolean;
+      }
+    | {
+          kind: "serverRoleMembership";
+          action: "ADD" | "DROP";
+          role: string;
+          member: string;
+      }
+    | {
+          kind: "databaseRoleMembership";
+          action: "ADD" | "DROP";
+          role: string;
+          member: string;
+      }
+    | { kind: "loginEnabled"; login: string; enabled: boolean; createDate: string }
+    | { kind: "userDefaultSchema"; user: string; schema: string; createDate: string }
+    | { kind: "dropUser"; user: string; createDate: string };
 
 /** Clave del estado donde vive cada sección cargable. */
 export const SECTION_STATE_KEYS = {

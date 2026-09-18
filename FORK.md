@@ -50,6 +50,12 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/tsconfig.extension.json` | **1 línea**: excluye `src/custom/webviews` | Mismo reparto que el upstream hace con `src/webviews` | M2 |
 | `extensions/mssql/tsconfig.webviews.json` | **2 líneas**: incluye `src/custom/webviews` y `src/custom/sharedInterfaces` | Ídem | M2 |
 | `extensions/mssql/tsconfig.webviews.json` | **M3, 1 línea**: incluye además `src/custom/admin/sql/types.ts` | Los tipos del dominio los fija el §9 del brief en esa ruta y el panel los pinta tal cual. No importan nada, así que compilan en los dos lados sin duplicarlos | M3 |
+| `extensions/mssql/package.json` | **M5**: el ajuste `sqlworks.productionServers` en `contributes.configuration.properties`, con `scope: "application"` | Regla 11.4 del brief. Un ajuste solo existe si está declarado aquí; el `scope` impide que el `settings.json` de un repositorio desmarque un servidor de producción (§22.7). Es el **único** archivo del upstream que M5 toca | M5 |
+
+**Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
+puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
+es auditable con `git grep -n '"sqlworks\.' -- extensions/mssql/package.json`. Mismo criterio que en
+M1 y M2.
 
 ### Archivos de test y de arnés e2e que el renombrado obligó a tocar
 
@@ -1106,6 +1112,13 @@ cualquier elemento, que es lo que de verdad indica que ya está montado. Está e
 
 ## 18. El API Object Management del STS: sondeo antes de M3
 
+> **Corregido en §22.5 (M5).** Este sondeo se hizo antes de M3 y su conclusión —el plan híbrido de
+> §18.6— **no** es lo que el fork hace. En resumen: `objectManagement/script` devuelve la contraseña
+> en claro para un login, y `save` ejecuta fuera de nuestra transacción y responde de forma
+> asíncrona, así que ninguno de los dos sirve para cumplir las reglas 11.3 y 11.6. M5 escribe su
+> propio DDL. Lo que sigue vigente es `initializeView` para el detalle de un objeto y el diagnóstico
+> de que los listados necesitan T-SQL propio.
+
 Pregunta que se planteó en M0 (§11.6): ¿soporta el SQL Tools Service los tipos de objeto de
 seguridad? Si los soporta, M5 puede pedirle a él el script en lugar de que generemos nuestro
 propio DDL. **Verificado contra SQL Server 2022 real**, con un arnés JSON-RPC.
@@ -1158,6 +1171,11 @@ cumple el propio STS.
 
 ### 18.3. `objectManagement/script` devuelve DDL sin ejecutar
 
+> **Corregido en §22.5:** para un **login** ese script lleva la contraseña **en claro**. El texto de
+> abajo la muestra vacía solo porque la sonda creó el login con una contraseña vacía. Mostrarlo en un
+> diálogo o dejarlo pasar por el registro viola la regla 11.3, así que el fork no usa `script` para
+> logins.
+
 ```
 USE [master] GO CREATE LOGIN [sqlworks_probe] WITH PASSWORD=N'' MUST_CHANGE, DEFAULT_DATABASE=[master], …
 USE [ParityDb] GO CREATE USER [sqlworks_probe] GO
@@ -1195,6 +1213,9 @@ para la tabla. Si ese campo no resuelve la herencia, el estado «heredado de rol
 que calcularlo nosotros combinando permisos explícitos y pertenencia a roles, como ya prevé el
 §10 del brief. No se da por bueno hasta comprobarlo.
 
+> **Comprobado en M4: el aviso era correcto.** `effectivePermissions` no resuelve la herencia, así
+> que la matriz la calcula por su cuenta (§21, `sharedInterfaces/permissionMatrix.ts`).
+
 ### 18.5. Lo que el API **no** da, y sigue necesitando T-SQL propio
 
 1. **Listados.** `initializeView` es un objeto por llamada. Para una rejilla de 200 logins serían
@@ -1208,6 +1229,14 @@ que calcularlo nosotros combinando permisos explícitos y pertenencia a roles, c
    objeto, no en forma de matriz.
 
 ### 18.6. Plan que sale de esto
+
+> **Sin efecto desde M5. Ver §22.5.** El plan de abajo daba por ahorrados los generadores de DDL
+> usando `objectManagement/script` + `/save`. No se puede: `save` ejecuta **fuera** de nuestra
+> transacción y responde de forma asíncrona, así que no hay forma de envolverlo en el lote de la
+> regla 11.6 ni de saber qué quedó aplicado, y `drop`/`rename` ejecutan de inmediato sin vista
+> previa. M5 escribe su propio DDL en `src/custom/admin/sql/ddl/`, con generadores puros y tests,
+> que es lo que el §9 del brief pedía desde el principio. **La tabla que sigue queda como registro
+> de lo que se pensó, no de lo que se hizo.**
 
 **Híbrido, y reduce M5 de forma importante:**
 
@@ -1689,3 +1718,256 @@ Lo que el e2e fija con datos reales, sobre la cadena sembrada
 - **No muestra permisos de objeto uno por uno.** La matriz parte de los permisos **explícitos** del
   catálogo; los objetos sin permiso explícito no aparecen, porque no hay nada que contar de ellos.
 - **No resuelve la jerarquía de objetos** (§21.3), y lo dice en pantalla.
+
+---
+
+## 22. Escritura: la única puerta (M5)
+
+M5 es el primer hito que **escribe** en el servidor. Todo lo que no es un `SELECT` sale por
+`src/custom/admin/sql/writeGate.ts`, y no hay una segunda ruta: ni un `tryRun` suelto en un
+controlador, ni una llamada a `objectManagement/save`. Esa es la propiedad que hace auditable el
+§11 del brief, porque las seis reglas se cumplen en un solo sitio.
+
+Antes de diseñarlo se midió el motor. Ocho sondas contra SQL Server 2022 (16.0.4295.3), y **tres de
+los resultados contradicen el diseño obvio**. Van primero, porque son la razón de que el lote tenga
+la forma que tiene y no otra más simple.
+
+### 22.1. Las tres medidas que cambiaron el diseño
+
+**1. `DROP DATABASE` dentro de una transacción no da el error 226, da el 574.**
+
+El 226 (`... no se permite dentro de una transacción de varias instrucciones`) es el que devuelven
+`CREATE DATABASE` y `ALTER DATABASE ... SET`. Lo intuitivo es tratar «DDL no transaccional» como un
+solo caso y mirar un solo número. Medido, `DROP DATABASE` devuelve **574**, con otro texto. Un
+`if (numero === 226)` habría dejado el caso destructivo sin mensaje propio. Por eso `GATE_ERRORS`
+lista los dos, y `Strings.writeGate.engineError` tiene una entrada para cada uno.
+
+De paso, el sondeo acotó la lista real: de todas las sentencias que M5 puede generar, **solo tres**
+son no transaccionales (`CREATE DATABASE`, `ALTER DATABASE ... SET`, `DROP DATABASE`), más `KILL`
+(6115). Todo lo demás —`GRANT`, `DENY`, `REVOKE`, `ALTER SERVER ROLE`, `ALTER ROLE`, `ALTER LOGIN`,
+`DROP USER`, `CREATE SCHEMA`— **sí** admite transacción y rollback. La regla 11.6 del brief se puede
+cumplir de verdad, no como aproximación.
+
+**2. `SET XACT_ABORT ON` no es decorativo: sin él el error deja una transacción huérfana.**
+
+Lo esperable es que un error dentro de `BEGIN TRY` salte al `CATCH` y ahí se revierta. Medido con
+`XACT_ABORT OFF`, el 226 **no aborta el lote**: la ejecución continúa y la transacción queda
+**abierta y sana** (`XACT_STATE() = 1`). El panel comparte la conexión con el editor del usuario
+(§4), así que eso es una transacción huérfana reteniendo bloqueos hasta que alguien desconecte —
+exactamente el problema que la sección de sesiones de §20 sirve para diagnosticar, provocado por
+nosotros. Con `ON`, el error condena la transacción y el `CATCH` la revierte.
+
+**3. Con `XACT_ABORT ON`, el `CATCH` no puede confirmar: el `COMMIT` falla con 3930.**
+
+El reflejo al escribir un `CATCH` es «decide si confirmar o revertir». Medido, tras un error con
+`XACT_ABORT ON` la transacción queda **condenada** (`XACT_STATE() = -1`) y un `COMMIT` devuelve 3930. Así que el `CATCH` del lote **solo revierte**, y no hay ninguna rama que confirme. No es una
+elección de estilo: la otra rama no existe en el motor.
+
+### 22.2. Las otras cinco medidas
+
+**4. `EXEC [base].sys.sp_executesql` resuelve tres problemas con una sola construcción.**
+
+- Los `GRANT`/`REVOKE` de ámbito de servidor exigen que la base actual sea `master`, o dan **4621**.
+- El DDL de base exige estar **en** la base destino, y ahí el nombre de tres partes no sirve: no
+  existe `[base].[esquema].[objeto]` para `ALTER ROLE`.
+- `CREATE SCHEMA` tiene que ser **la primera sentencia de su lote** (si no, **156**), y dentro de
+  `sp_executesql` lo es, porque `sp_executesql` es su propio lote.
+
+Y se comprobó lo que hacía falta para poder usarlo: al volver de la llamada, `DB_NAME()` sigue
+siendo la base original —el cambio de contexto dura solo la llamada— y el `ROLLBACK` del llamante
+**sí** alcanza lo que se hizo dentro. Sin esa segunda propiedad, enrutar por `sp_executesql` habría
+roto la transacción.
+
+**5. Todo el lote va en **una sola** llamada de `query/simpleexecute`, y sin `GO`.**
+
+El estado transaccional no sobrevive entre llamadas: `BEGIN TRANSACTION` en una y `@@TRANCOUNT` en
+la siguiente da **0**. Y con `GO` dentro del texto, `query/simpleexecute` ejecuta lo que hay detrás
+pero **se come los errores** de los lotes siguientes: un fallo volvería como éxito. Las dos cosas
+juntas obligan a un único lote, un único `SELECT` de informe al final, y ningún `GO`.
+
+**6. `HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY USER')` devuelve `NULL`, no 0 ni 1.**
+
+Por eso `applyChanges` **no** comprueba permisos de escritura antes de ejecutar, y está comentado en
+el código: una comprobación previa mal interpretada bloquearía incluso a `sa`. La transacción hace
+inocuo el fallo de permisos —se revierte todo— y el panel muestra el mensaje del motor.
+
+**7. Al borrar y recrear un **usuario** de base, `principal_id` y `sid` se conservan.**
+
+Medido dentro de una transacción revertida: `principal_id` 9 → 9, y el `sid` byte a byte igual. La
+única columna que cambia es `create_date`. En un **login** sí cambian `principal_id` y `sid`. De ahí
+que el testigo de identidad de las precondiciones sea `(nombre, tipo, create_date)` y que
+`create_date` sea obligatoria: comparar por `principal_id` no habría detectado nada.
+
+**8. Los SPID se reutilizan de inmediato** (medido en §20), que es por qué `KILL` recomprueba la
+identidad de la sesión antes de ejecutar.
+
+### 22.3. La forma del lote, y qué garantiza cada parte
+
+```sql
+SET NOCOUNT ON;
+SET XACT_ABORT ON;                          -- medida 2
+DECLARE @paso int = 0; …                    -- de qué paso informar si falla
+IF @@TRANCOUNT > 0                          -- guarda de transacción heredada
+BEGIN SET @resultado = N'transaccion_heredada'; GOTO informe; END
+BEGIN TRY
+    BEGIN TRANSACTION;
+    SET @paso = 1; SET @etiqueta = N'…';
+    IF NOT (<precondición>) THROW 50001, N'…', 1;   -- dentro de la transacción
+    EXEC [base].sys.sp_executesql N'…';             -- medida 4
+    …
+    COMMIT TRANSACTION;
+END TRY
+BEGIN CATCH                                 -- medida 3: solo revierte
+    SET @resultado = N'revertido'; SET @numero = ERROR_NUMBER(); …
+    IF XACT_STATE() <> 0 ROLLBACK TRANSACTION;
+END CATCH
+IF @@TRANCOUNT > 0 ROLLBACK TRANSACTION;    -- cinturón, por si el CATCH no llegó
+informe:
+SELECT @resultado, @paso, @etiqueta, @numero, @mensaje, @@TRANCOUNT;
+```
+
+La **guarda de transacción heredada** es propia, no salió de una medida: si la conexión ya trae una
+transacción abierta, el lote no abre la suya ni ejecuta nada. Confirmar o revertir la transacción de
+otro no es cosa del panel, y sobre una conexión compartida con el editor del usuario es un caso real.
+
+Las **precondiciones van dentro de la transacción**, no en el cliente. Comprobar en el cliente deja
+una ventana entre la comprobación y la escritura; dentro, la comprobación y el cambio confirman o se
+revierten juntos. Sus números (`50001` objeto cambiado, `50002` fila cambiada, `50003` estado
+cambiado) tienen mensaje propio en `Strings.writeGate.engineError`.
+
+### 22.4. Las seis reglas del §11, y dónde se cumple cada una
+
+| Regla                                       | Dónde                                                                                                                                                                              |
+| ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 11.1 mostrar el T-SQL y confirmar           | `panels/writeConfirm.ts` (`confirmPlan`) y el cajón, que muestra **los dos** textos: el legible y el exacto que se envía                                                           |
+| 11.2 identificadores validados o abortar    | `util/identifiers.ts`; `ddl/plan.ts:validateStatement` rechaza comillas, `;`, `GO` y `USE` en una sentencia ya construida                                                          |
+| 11.3 la contraseña no se guarda ni se anota | `sharedInterfaces/pendingChanges.ts` no tiene campo de contraseña (hay un test que lo fija); el ejecutor **nunca lanza**, así que el texto del lote no puede acabar en el registro |
+| 11.4 marca de producción                    | `util/production.ts` + ajuste `sqlworks.productionServers`; insignia en el panel y en el cajón, aviso extra en el diálogo                                                          |
+| 11.5 escribir el nombre                     | `confirmByTypingName`, exacto y sensible a mayúsculas, con `ignoreFocusOut`                                                                                                        |
+| 11.6 transacción con `XACT_ABORT ON`        | `writeGate.ts:buildTransactionalBatch`; lo no transaccional va por `runStandalone` y **marcado como irreversible** en la vista previa                                              |
+
+Dos detalles de la 11.3 que conviene no perder. El ejecutor **no lanza nunca**: devuelve el
+resultado. Un `throw` desde un reducer acaba en `webviewBaseController.ts:432-441`, que hace
+`logger.error(getErrorMessage(error))`, y ahí no pueden acabar ni el texto del lote ni un mensaje del
+motor sin sanear. Y el único sitio donde se dobla una comilla es la función `literal` de
+`writeGate.ts`, que escapa **etiquetas de presentación** para meterlas en `N'…'`; las **sentencias**
+no pasan por ahí, porque para ellas la regla manda abortar, no escapar.
+
+### 22.5. Correcciones a §18
+
+El sondeo de §18 se hizo antes de M3 y llegó a un plan híbrido que M5 **no sigue**. Las tres
+correcciones:
+
+- **§18.3 es incorrecto en un punto que importa.** `objectManagement/script` devuelve el DDL sin
+  ejecutar, sí, pero para un login **devuelve la contraseña en claro** dentro del `CREATE LOGIN`.
+  Mostrar ese script en un diálogo, o dejar que pase por el registro, viola la regla 11.3. El fork
+  no usa `script` para logins.
+- **§18.6 queda sin efecto para M5.** El plan era usar `objectManagement/script` + `/save` para
+  crear y modificar. No se puede: `save` **ejecuta fuera de nuestra transacción** y responde de
+  forma asíncrona, así que no hay manera de envolverlo en el lote de la regla 11.6 ni de saber qué
+  quedó aplicado; y `drop`/`rename` ejecutan de inmediato, sin vista previa. M5 escribe su propio
+  DDL en `src/custom/admin/sql/ddl/`, con generadores puros y sus tests, que es lo que el §9 del
+  brief pedía desde el principio. Lo que §18.6 daba por ahorrado no lo estaba.
+- **§18.4 se confirma en lo que avisaba**: `effectivePermissions` no resuelve la herencia. La matriz
+  de M4 la calcula por su cuenta (§21), y el aviso de §18.4 era correcto.
+
+Lo que **sí** sigue en pie de §18: `initializeView` para el detalle de un objeto concreto, y el
+diagnóstico de que los listados hay que hacerlos con T-SQL propio.
+
+### 22.6. Listas cerradas de permisos, medidas
+
+`ddl/permissionNames.ts` no valida los nombres de permiso con una expresión regular: los compara
+contra listas cerradas sacadas de `sys.fn_builtin_permissions` de la propia instancia.
+
+| Ámbito   | Permisos |
+| -------- | -------- |
+| SERVER   | 51       |
+| DATABASE | 105      |
+| SCHEMA   | 13       |
+| OBJECT   | 13       |
+
+`toPermissionScope` devuelve `undefined` para las clases que el panel todavía no cambia
+(`DATABASE_PRINCIPAL`, `TYPE`, y cualquier otra), y quien la llama **aborta**. No se intenta
+adivinar la sintaxis de una clase que no se ha medido.
+
+Dos decisiones del generador de permisos que no son evidentes:
+
+- **Revocar un permiso concedido con `WITH GRANT OPTION` se aborta.** Quitarlo exige `CASCADE`, que
+  también revocaría lo que ese principal haya concedido a otros. Eso no se decide en un clic, así
+  que la fila sale deshabilitada y explica por qué.
+- **Columna ausente y columna vacía no son lo mismo.** `column: undefined` es un permiso de tabla;
+  `column: ""` es un error de quien llama. Tratarlos igual convertía un permiso de columna en uno de
+  tabla entera, ampliándolo en silencio. Lo encontró un test propio.
+
+### 22.7. La marca de producción
+
+El ajuste es `sqlworks.productionServers`, con **`scope: "application"`**. Ese `scope` no es un
+detalle: sin él, el `.vscode/settings.json` de cualquier repositorio clonado podría **desmarcar** un
+servidor de producción, y la marca dejaría de ser una garantía.
+
+Se identifica de dos formas porque `profile.id` solo existe en los perfiles **guardados** —el
+upstream lo asigna en `connectionconfig.ts` al guardar—, y un servidor de producción al que alguien
+se conecta sin guardar el perfil es justo el caso en el que la marca importa. De ahí la semántica:
+**unión, y solo amplía**. Un patrón no puede quitar la marca que puso un id, ni al revés, y no hay
+forma de escribir una excepción.
+
+Cuando el ajuste está **vacío**, el panel lo dice con una línea neutra. Que nadie haya marcado nada
+no puede parecer lo mismo que «este servidor no es de producción»: sin ese aviso, el día que alguien
+abra el panel contra producción sin haber configurado el ajuste no vería ninguna diferencia. Tampoco
+se marca todo como producción por omisión, que enseñaría a ignorar la insignia, ni se adivina por el
+nombre.
+
+### 22.8. Un agujero que encontró un test propio
+
+Montar un cambio limpiaba la vista previa del webview pero dejaba vivo el plan del host
+(`this.currentPlan`). Con eso, un `previewId` viejo seguía coincidiendo y **el plan anterior se
+ejecutaba** aunque la lista de cambios ya fuera otra: exactamente lo que el nonce existe para
+impedir. Ahora `currentPlan` se limpia al montar, desmontar, descartar y al cambiar de base de
+datos, y hay un test de flujo que lo fija.
+
+En la misma línea, cambiar de base de datos **descarta** los cambios de ámbito de base ya montados,
+con aviso visible, en lugar de ejecutarlos contra la base nueva. Los de ámbito de servidor se
+quedan, porque no dependen de la base.
+
+### 22.9. Verificación
+
+| Qué                              | Estado                                                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------- |
+| Unitarios propios de M5          | ✅ 80 tests nuevos (`writeGate` 27, `ddlGenerators` 26, `production` 13, `changeSetFlow` 14) |
+| Suite completa del repositorio   | ✅ 5081 + 205, 0 fallos                                                                      |
+| Lote real contra SQL Server 2022 | ✅ arnés directo, 16/16 comprobaciones                                                       |
+| Interfaz                         | ✅ `test/e2e/sqlworksAdminPanel.spec.ts`, 2 tests                                            |
+
+El arnés de lote no usa Playwright: importa los módulos compilados del fork, construye el lote con
+`buildTransactionalBatch` y ejecuta **el texto exacto** con `sqlcmd`, leyendo el informe con
+`parseReport`. Lo que se comprueba es el artefacto real. Tres casos:
+
+1. **Lote de 3 cambios que se aplica**: informe `aplicado`, `@@TRANCOUNT` final 0, y el catálogo
+   cambiado en las tres cosas.
+2. **Lote de 5 cambios que falla en el 3.º**: informe `revertido` con `paso = 3`, número de error
+   del motor **15151**, la etiqueta del paso 3, y el catálogo **idéntico al de antes** — ni el paso 1
+   ni el 2 quedaron aplicados, y el 4 y el 5 no se ejecutaron.
+3. **Transacción heredada**: con una transacción ya abierta, el informe dice
+   `transaccion_heredada` y no se ejecutó nada.
+
+Al terminar no queda ningún objeto de prueba (`RESTOS_TOTALES = 0`).
+
+El e2e **cancela en todas las barreras**, y lo comprueba releyendo del servidor: monta un cambio de
+ámbito de servidor y otro de base desde dos secciones distintas, verifica que la vista previa lleva
+`SET XACT_ABORT ON`, `BEGIN TRANSACTION` y **las dos rutas** (`EXEC [master].sys.sp_executesql` y
+`EXEC [ParityDb].sys.sp_executesql`), cancela, y confirma que el catálogo no cambió. En el caso
+destructivo **confirma el primer diálogo a propósito**, para comprobar que detrás hay una segunda
+barrera, y cancela en la caja de texto; la última comprobación del bloque es que el usuario sigue
+existiendo, así que si esa barrera no estuviera el test lo detectaría en lugar de dejarlo pasar. El
+segundo `describe` levanta VS Code con `sqlworks.productionServers` sembrado y comprueba que la
+insignia sale y que un cambio **reversible** también exige escribir el nombre del servidor.
+
+### 22.10. Lo que M5 deliberadamente no hace
+
+- **No crea logins, usuarios ni roles**, y por tanto no toca contraseñas. Es M6. La razón es de
+  alcance, **no** que la regla 11.3 sea imposible: se cumple con marcador en el script y sustitución
+  en el momento de ejecutar, y el diseño ya lo contempla.
+- **No borra bases de datos.** `DROP DATABASE` es de las tres sentencias no transaccionales
+  (número 574, §22.1) y va por la ruta irreversible, que hoy solo entrega `KILL`.
+- **No comprueba permisos de escritura antes de ejecutar**, por la medida 6.
+- **No usa `objectManagement/save`, `/drop` ni `/rename`** (§22.5).

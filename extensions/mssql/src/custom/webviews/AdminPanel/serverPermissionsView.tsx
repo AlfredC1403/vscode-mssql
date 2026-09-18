@@ -2,11 +2,18 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useMemo } from "react";
-import { Badge, TableCellLayout, createTableColumn, makeStyles } from "@fluentui/react-components";
+import { useContext, useMemo } from "react";
+import {
+    Badge,
+    Button,
+    TableCellLayout,
+    createTableColumn,
+    makeStyles,
+} from "@fluentui/react-components";
 
 import { ServerPermission } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
 
@@ -15,7 +22,21 @@ const useStyles = makeStyles({
         fontFamily: "var(--vscode-editor-font-family, monospace)",
         fontSize: "12px",
     },
+    action: {
+        minWidth: "auto",
+    },
 });
+
+/**
+ * Códigos de estado del catálogo, tal como los necesita la precondición del cambio: la sentencia se
+ * comprueba contra el estado que se leyó, dentro de la transacción.
+ */
+const STATE_CODES = {
+    GRANT: "G",
+    DENY: "D",
+    GRANT_WITH_GRANT_OPTION: "W",
+    REVOKE: "NONE",
+} as const;
 
 /** Color de la insignia según el estado. `DENY` gana siempre, y se ve. */
 function stateColor(
@@ -47,7 +68,9 @@ function describeSecurable(permission: ServerPermission): string {
 /** Permisos explícitos a nivel de servidor (§8.3 del brief), en solo lectura. */
 export const ServerPermissionsView = () => {
     const styles = useStyles();
+    const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.serverPermissions);
+    const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
 
     const columns = useMemo(
         () => [
@@ -91,8 +114,54 @@ export const ServerPermissionsView = () => {
                     </Badge>
                 ),
             }),
+            createTableColumn<ServerPermission>({
+                columnId: "actions",
+                renderHeaderCell: () => Loc.sessions.columns.actions,
+                renderCell: (permission) => {
+                    // El permiso solo cae sobre la instancia entera: las demás clases (punto de
+                    // conexión, otro login) se ven pero todavía no se cambian desde aquí.
+                    const supported = permission.securableClass === "SERVER";
+                    const staged = pending.some(
+                        (change) =>
+                            change.kind === "serverPermission" &&
+                            change.subject === `${permission.grantee} · ${permission.permission}`,
+                    );
+                    const grantable = permission.state === "GRANT_WITH_GRANT_OPTION";
+                    const label = `${permission.permission} a ${permission.grantee}`;
+
+                    return (
+                        <Button
+                            className={styles.action}
+                            size="small"
+                            appearance="subtle"
+                            disabled={!supported || staged || grantable}
+                            title={
+                                !supported
+                                    ? Loc.rowActions.notSupported
+                                    : grantable
+                                      ? Loc.rowActions.grantableNeedsCascade
+                                      : staged
+                                        ? Loc.rowActions.staged
+                                        : undefined
+                            }
+                            aria-label={Loc.rowActions.revokeAria(label)}
+                            onClick={() =>
+                                context?.stageChange({
+                                    kind: "serverPermission",
+                                    action: "REVOKE",
+                                    permission: permission.permission,
+                                    principal: permission.grantee,
+                                    currentState: STATE_CODES[permission.state],
+                                    grantable,
+                                })
+                            }>
+                            {Loc.rowActions.revoke}
+                        </Button>
+                    );
+                },
+            }),
         ],
-        [styles],
+        [styles, context, pending],
     );
 
     return (
@@ -124,8 +193,9 @@ export const ServerPermissionsView = () => {
             columnSizing={{
                 grantee: { minWidth: 200, defaultWidth: 260 },
                 permission: { minWidth: 180, defaultWidth: 260 },
-                securable: { minWidth: 200, defaultWidth: 280 },
-                state: { minWidth: 140, defaultWidth: 180 },
+                securable: { minWidth: 200, defaultWidth: 260 },
+                state: { minWidth: 140, defaultWidth: 170 },
+                actions: { minWidth: 110, defaultWidth: 120 },
             }}
         />
     );

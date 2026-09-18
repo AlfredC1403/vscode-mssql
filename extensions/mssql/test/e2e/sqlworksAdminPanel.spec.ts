@@ -162,9 +162,14 @@ test.describe("SQLWorks - Panel de administración", () => {
 
         // --- Logins (§8.1): el login sembrado, su tipo y su rol de servidor ---
         await openTab("Servidor", "Logins");
-        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible({
-            timeout: 60_000,
-        });
+        // `exact` desde M5: la columna de acciones lleva un botón por fila, y el nombre accesible
+        // de su celda («Deshabilitar el login parity_user») contiene el del login. Sin `exact` el
+        // localizador encontraría dos celdas.
+        await expect(panel.getByRole("gridcell", { name: "parity_user", exact: true })).toBeVisible(
+            {
+                timeout: 60_000,
+            },
+        );
         await expect(panel.getByRole("gridcell", { name: "Login SQL" }).first()).toBeVisible();
         // parity_user pertenece a dbcreator: se sembró así en §13.1.
         await expect(panel.getByRole("gridcell", { name: /dbcreator/ }).first()).toBeVisible();
@@ -176,10 +181,13 @@ test.describe("SQLWorks - Panel de administración", () => {
 
         // --- Roles de servidor (§8.2): roles fijos con sus miembros ---
         await openTab("Servidor", "Roles de servidor");
-        await expect(panel.getByRole("gridcell", { name: "sysadmin" })).toBeVisible({
+        // Aquí se mira la **fila**, no la celda: `sysadmin` lleva además la insignia de rol
+        // peligroso, así que su celda no se llama exactamente «sysadmin»; y desde M5 cada miembro
+        // es un botón cuya etiqueta («Quitar sa del rol sysadmin») también contiene el nombre.
+        await expect(panel.getByRole("row").filter({ hasText: "sysadmin" }).first()).toBeVisible({
             timeout: 60_000,
         });
-        await expect(panel.getByRole("gridcell", { name: "public" })).toBeVisible();
+        await expect(panel.getByRole("row").filter({ hasText: "public" }).first()).toBeVisible();
         // Los roles internos ##MS_...## se filtran, como hace SSMS.
         await expect(panel.getByRole("gridcell", { name: /##MS_/ })).toHaveCount(0);
 
@@ -247,7 +255,9 @@ test.describe("SQLWorks - Panel de administración", () => {
         await openTab("Servidor", "Logins");
         const search = panel.getByRole("textbox", { name: /Buscar por nombre/ });
         await search.fill("parity");
-        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible();
+        await expect(
+            panel.getByRole("gridcell", { name: "parity_user", exact: true }),
+        ).toBeVisible();
         await expect(panel.getByRole("gridcell", { name: "sa", exact: true })).toHaveCount(0);
 
         // ------------------------------------------------------------------
@@ -265,12 +275,18 @@ test.describe("SQLWorks - Panel de administración", () => {
         await openTab("Base de datos", "Usuarios");
         // `parity_user` sale dos veces en la misma fila: como usuario y como login del servidor,
         // que es justo lo que significa un usuario asignado a un login del mismo nombre.
-        await expect(panel.getByRole("gridcell", { name: "parity_user" }).first()).toBeVisible({
+        // `exact` desde M5: la columna de acciones añade «Borrar el usuario parity_user», que
+        // también contiene el nombre; las dos celdas que interesan son la del usuario y la del login.
+        await expect(
+            panel.getByRole("gridcell", { name: "parity_user", exact: true }).first(),
+        ).toBeVisible({
             timeout: 60_000,
         });
-        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toHaveCount(2);
+        await expect(panel.getByRole("gridcell", { name: "parity_user", exact: true })).toHaveCount(
+            2,
+        );
         // `analista` se creó WITHOUT LOGIN: sale sin login y con esquema por omisión `ventas`.
-        await expect(panel.getByRole("gridcell", { name: "analista" })).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: "analista", exact: true })).toBeVisible();
         await expect(panel.getByRole("gridcell", { name: /ventas_supervisores/ })).toBeVisible();
         // Los cuatro usuarios que crea SQL Server van marcados.
         await expect(panel.getByRole("gridcell", { name: /dbo/ }).first()).toBeVisible();
@@ -278,10 +294,14 @@ test.describe("SQLWorks - Panel de administración", () => {
 
         // --- Roles de base (§8.3.2): fijos, propios, y un rol miembro de otro ---
         await openTab("Base de datos", "Roles");
-        await expect(panel.getByRole("gridcell", { name: "ventas_lectores" })).toBeVisible({
+        // `exact` desde M5: «Quitar ventas_supervisores del rol ventas_lectores» contiene el nombre
+        // del rol, igual que en los roles de servidor.
+        await expect(
+            panel.getByRole("gridcell", { name: "ventas_lectores", exact: true }),
+        ).toBeVisible({
             timeout: 60_000,
         });
-        await expect(panel.getByRole("gridcell", { name: "db_owner" })).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: "db_owner", exact: true })).toBeVisible();
         // ventas_supervisores es miembro de ventas_lectores: eso es lo que da la herencia.
         await expect(
             panel
@@ -336,5 +356,204 @@ test.describe("SQLWorks - Panel de administración", () => {
         // `ventas` es de ParityDb: en master no está.
         await expect(panel.getByRole("gridcell", { name: "ventas", exact: true })).toHaveCount(0);
         await expect(panel.getByRole("gridcell", { name: "dbo", exact: true })).toBeVisible();
+
+        // ------------------------------------------------------------------
+        // M5: montar cambios, verlos y **cancelar**. Este test no escribe nada en el servidor.
+        // ------------------------------------------------------------------
+
+        // Se vuelve a ParityDb: los cambios de ámbito de base se montan contra la base seleccionada.
+        await databasePicker.click();
+        await panel.getByRole("option", { name: "ParityDb", exact: true }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+
+        // Regla 11.4: con el ajuste vacío el panel tiene que **decirlo**. Que nadie haya marcado
+        // nada no puede parecer lo mismo que «este servidor no es de producción».
+        await expect(
+            panel.getByText(/Ningún servidor está marcado como de producción/),
+        ).toBeVisible();
+        // `exact` no es opcional aquí: sin él, `getByText` busca subcadena **sin distinguir
+        // mayúsculas**, y el propio aviso de «…como de producción» encajaría con la insignia.
+        await expect(panel.getByText("PRODUCCIÓN", { exact: true })).toHaveCount(0);
+
+        // --- Un cambio de ámbito de servidor, desde la sección de permisos ---
+        await openTab("Servidor", "Permisos");
+        await panel.getByRole("button", { name: "Revocar CONNECT SQL a parity_user" }).click();
+        await expect(panel.getByText("1 cambio pendiente")).toBeVisible();
+
+        // --- Y uno de ámbito de base, desde otra sección: el cajón junta los dos ---
+        await openTab("Base de datos", "Roles");
+        await panel
+            .getByRole("button", { name: "Quitar ventas_supervisores del rol ventas_lectores" })
+            .click();
+        await expect(panel.getByText("2 cambios pendientes")).toBeVisible();
+
+        // El cajón se ve desde cualquier sección, que es para lo que está anclado al pie.
+        await expect(panel.getByText(/REVOKE CONNECT SQL/)).toBeVisible();
+
+        // --- La vista previa: el script legible y el texto exacto (regla 11.1) ---
+        await panel.getByRole("button", { name: "Revisar y aplicar" }).click();
+
+        const readableScript = panel.locator("pre").first();
+        await expect(readableScript).toBeVisible();
+        await expect(readableScript).toContainText("SET XACT_ABORT ON;");
+        await expect(readableScript).toContainText("BEGIN TRANSACTION;");
+        await expect(readableScript).toContainText("COMMIT TRANSACTION;");
+        await expect(readableScript).toContainText("REVOKE CONNECT SQL");
+        await expect(readableScript).toContainText("ALTER ROLE");
+        // Las dos rutas: el permiso de servidor va por master, el cambio de rol por la base.
+        await expect(readableScript).toContainText("USE [master];");
+        await expect(readableScript).toContainText("USE [ParityDb];");
+
+        // El texto **exacto** que se envía no es el legible: va envuelto en sp_executesql, y eso es
+        // lo que el usuario tiene derecho a ver antes de que se ejecute.
+        await panel
+            .getByRole("button", { name: "Ver el texto exacto que se envía al servidor" })
+            .click();
+        const exactBatch = panel.locator("pre").nth(1);
+        await expect(exactBatch).toContainText("SET XACT_ABORT ON;");
+        await expect(exactBatch).toContainText("BEGIN TRANSACTION;");
+        await expect(exactBatch).toContainText("EXEC [master].sys.sp_executesql");
+        await expect(exactBatch).toContainText("EXEC [ParityDb].sys.sp_executesql");
+        // La guarda de transacción heredada y el informe final forman parte del lote real.
+        await expect(exactBatch).toContainText("IF @@TRANCOUNT > 0");
+        await expect(exactBatch).toContainText("BEGIN CATCH");
+
+        // --- El diálogo modal muestra el lote completo, y se cancela ---
+        await panel.getByRole("button", { name: "Aplicar 2 cambios" }).click();
+        const applyDialog = page.locator(".monaco-dialog-box");
+        await expect(applyDialog).toBeVisible({ timeout: 30_000 });
+        await expect(applyDialog).toContainText("¿Aplicar 2 cambios?");
+        await expect(applyDialog).toContainText("REVOKE CONNECT SQL");
+        await expect(applyDialog).toContainText("ALTER ROLE");
+        await expect(applyDialog).toContainText(/se revierten todas/);
+        await page.keyboard.press("Escape");
+        await expect(applyDialog).toBeHidden();
+
+        // --- Y el catálogo sigue como estaba: cancelar no escribe ---
+        // Se vuelve a leer del servidor con el botón de actualizar, no se mira la copia en pantalla.
+        await openTab("Servidor", "Permisos");
+        await panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        await expect(
+            panel
+                .getByRole("row")
+                .filter({ hasText: "parity_user" })
+                .filter({ hasText: "CONNECT SQL" }),
+        ).toBeVisible();
+
+        await openTab("Base de datos", "Roles");
+        await panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        await expect(
+            panel
+                .getByRole("row")
+                .filter({ hasText: "ventas_lectores" })
+                .filter({ hasText: "ventas_supervisores" }),
+        ).toBeVisible();
+
+        // --- Descartar deja el cajón vacío ---
+        await panel.getByRole("button", { name: "Descartar todo" }).click();
+        await expect(panel.getByText(/cambios? pendientes?/)).toHaveCount(0);
+
+        // ------------------------------------------------------------------
+        // M5, regla 11.5: lo destructivo pide **escribir el nombre** del objeto.
+        // ------------------------------------------------------------------
+        await openTab("Base de datos", "Usuarios");
+        await panel.getByRole("button", { name: "Borrar el usuario analista" }).click();
+        await expect(panel.getByText("1 cambio pendiente")).toBeVisible();
+
+        await panel.getByRole("button", { name: "Revisar y aplicar" }).click();
+        await expect(panel.locator("pre").first()).toContainText("DROP USER [analista]");
+        // El cajón avisa de la caja de texto **en la vista previa**, antes del diálogo: el aviso
+        // forma parte de lo que se revisa, no de lo que se ejecuta.
+        await expect(
+            panel.getByText(/Antes de ejecutar habrá que escribir «analista»/),
+        ).toBeVisible();
+        await panel.getByRole("button", { name: "Aplicar 1 cambio" }).click();
+
+        const dropDialog = page.locator(".monaco-dialog-box");
+        await expect(dropDialog).toBeVisible({ timeout: 30_000 });
+        await expect(dropDialog).toContainText("DROP USER [analista]");
+        // Se confirma el primer diálogo **a propósito**: lo que se comprueba es que detrás hay una
+        // segunda barrera. Si no la hubiera, el usuario se borraría, y la última comprobación de
+        // este bloque lo detectaría en lugar de dejarlo pasar.
+        await dropDialog.getByRole("button", { name: "Aplicar 1 cambio" }).click();
+
+        const typeBox = page.locator(".quick-input-widget");
+        await expect(typeBox).toBeVisible({ timeout: 30_000 });
+        await expect(typeBox).toContainText(/Escribe «analista» para confirmar/);
+        // Escribir otra cosa no vale: la caja lo dice y no deja seguir.
+        await page.keyboard.type("analist");
+        await expect(typeBox).toContainText(/Tiene que coincidir exactamente con «analista»/);
+        await page.keyboard.press("Escape");
+        await expect(typeBox).toBeHidden();
+
+        // El usuario sigue ahí: ni el diálogo confirmado ni la caja cancelada escribieron nada.
+        await panel.getByRole("button", { name: "Volver a leer los datos de la conexión" }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        await expect(panel.getByRole("gridcell", { name: "analista", exact: true })).toBeVisible();
+
+        await panel.getByRole("button", { name: "Descartar todo" }).click();
+    });
+});
+
+/**
+ * Regla 11.4 del brief: un servidor marcado como de producción se ve, y exige una barrera más.
+ *
+ * Va en su propio `describe` porque la marca es un ajuste de usuario (`scope: "application"`) y cada
+ * `describe` levanta su propio VS Code con su propio `settings.json`. Aquí también se **cancela**.
+ */
+test.describe("SQLWorks - Panel de administración contra un servidor de producción", () => {
+    const getContext = useSharedVsCodeLifecycle({
+        launchOptions: {
+            initialConfig: {
+                ...INITIAL_CONFIG,
+                // Se marca por patrón, que es el caso de una conexión sin perfil guardado: el id
+                // solo existe cuando el perfil se ha guardado, y aquí se escribe a mano.
+                "sqlworks.productionServers": { serverPatterns: ["*"] },
+            },
+        },
+    });
+
+    test("marca el servidor y exige escribir su nombre incluso para un cambio reversible", async () => {
+        const { page } = getContext();
+        const panel = await openAdminPanel(page);
+
+        // La insignia es visible desde que se abre, sin tener que montar ningún cambio.
+        await expect(panel.getByText("PRODUCCIÓN", { exact: true }).first()).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByText(/Ningún servidor está marcado/)).toHaveCount(0);
+
+        await panel
+            .getByRole("tablist", { name: "Servidor" })
+            .getByRole("tab", { name: "Permisos", exact: true })
+            .click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+
+        await panel.getByRole("button", { name: "Revocar CONNECT SQL a parity_user" }).click();
+        await expect(panel.getByText("1 cambio pendiente")).toBeVisible();
+
+        await panel.getByRole("button", { name: "Revisar y aplicar" }).click();
+        // La vista previa avisa de que habrá que escribir el nombre **del servidor**, no de un
+        // objeto: en producción la barrera se aplica también a un cambio que no borra nada.
+        // El nombre sale del `.env` y puede llevar `\` o `.`, así que se escapa antes de meterlo
+        // en una expresión regular.
+        const escapedServer = getServerName().replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        await expect(
+            panel.getByText(new RegExp(`Antes de ejecutar habrá que escribir «${escapedServer}»`)),
+        ).toBeVisible();
+
+        await panel.getByRole("button", { name: "Aplicar 1 cambio" }).click();
+
+        const dialog = page.locator(".monaco-dialog-box");
+        await expect(dialog).toBeVisible({ timeout: 30_000 });
+        await expect(dialog).toContainText("este servidor está marcado como de producción");
+        await expect(dialog).toContainText("REVOKE CONNECT SQL");
+        // Se cancela en el primer diálogo: este test no escribe nada.
+        await page.keyboard.press("Escape");
+        await expect(dialog).toBeHidden();
+
+        await panel.getByRole("button", { name: "Descartar todo" }).click();
     });
 });

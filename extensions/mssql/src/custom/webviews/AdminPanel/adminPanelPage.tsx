@@ -28,6 +28,8 @@ import { DatabaseRolesView } from "./databaseRolesView";
 import { SchemasView } from "./schemasView";
 import { PermissionMatrixView } from "./permissionMatrixView";
 import { DatabasePicker } from "./databasePicker";
+import { PendingChangesDrawer } from "./pendingChangesDrawer";
+import { ProductionBadge } from "./productionBadge";
 import { WebviewStrings as Loc } from "../strings";
 import {
     AdminSection,
@@ -164,16 +166,20 @@ export const AdminPanelPage = () => {
                 sectionReadAt ? Loc.adminPanel.readAt(formatReadAt(sectionReadAt)) : undefined,
             ]}
             actions={
-                <Button
-                    className={styles.refreshButton}
-                    appearance="secondary"
-                    size="small"
-                    icon={<ArrowClockwiseRegular />}
-                    onClick={() => context.refresh()}
-                    aria-label={Loc.adminPanel.refreshAriaLabel}>
-                    {Loc.adminPanel.refresh}
-                </Button>
-            }>
+                <>
+                    <ProductionBadge />
+                    <Button
+                        className={styles.refreshButton}
+                        appearance="secondary"
+                        size="small"
+                        icon={<ArrowClockwiseRegular />}
+                        onClick={() => context.refresh()}
+                        aria-label={Loc.adminPanel.refreshAriaLabel}>
+                        {Loc.adminPanel.refresh}
+                    </Button>
+                </>
+            }
+            drawer={<PendingChangesDrawer />}>
             {errorMessage && (
                 <MessageBar className={styles.notice} intent="error" role="alert">
                     <MessageBarBody>{errorMessage}</MessageBarBody>

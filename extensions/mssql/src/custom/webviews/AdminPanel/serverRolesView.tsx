@@ -2,11 +2,18 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useMemo } from "react";
-import { Badge, TableCellLayout, createTableColumn, makeStyles } from "@fluentui/react-components";
+import { useContext, useMemo } from "react";
+import {
+    Badge,
+    Button,
+    TableCellLayout,
+    createTableColumn,
+    makeStyles,
+} from "@fluentui/react-components";
 
 import { ServerRole } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
 
@@ -30,12 +37,25 @@ const useStyles = makeStyles({
     count: {
         fontVariantNumeric: "tabular-nums",
     },
+    memberChips: {
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "4px",
+        alignItems: "center",
+    },
+    memberChip: {
+        minWidth: "auto",
+        fontSize: "11px",
+        fontFamily: "var(--vscode-editor-font-family, monospace)",
+    },
 });
 
 /** Roles de servidor (§8.2 del brief), en solo lectura. */
 export const ServerRolesView = () => {
     const styles = useStyles();
+    const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.serverRoles);
+    const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
 
     const columns = useMemo(
         () => [
@@ -80,16 +100,55 @@ export const ServerRolesView = () => {
             createTableColumn<ServerRole>({
                 columnId: "members",
                 renderHeaderCell: () => Loc.serverRoles.columns.members,
-                renderCell: (role) => (
-                    <TableCellLayout truncate>
-                        <span className={styles.members}>
-                            {role.members.length > 0 ? role.members.join(", ") : Loc.common.none}
-                        </span>
-                    </TableCellLayout>
-                ),
+                renderCell: (role) => {
+                    if (role.members.length === 0) {
+                        return <span className={styles.members}>{Loc.common.none}</span>;
+                    }
+
+                    // Un botón por miembro: quitar a alguien de un rol es una acción de fila, y sin
+                    // esto habría que abrir un formulario para algo que es un clic.
+                    return (
+                        <div className={styles.memberChips}>
+                            {role.members.map((member) => {
+                                const staged = pending.some(
+                                    (change) =>
+                                        change.kind === "serverRoleMembership" &&
+                                        change.subject === `${member} · ${role.name}`,
+                                );
+                                return (
+                                    <Button
+                                        key={member}
+                                        className={styles.memberChip}
+                                        size="small"
+                                        appearance="outline"
+                                        disabled={staged}
+                                        title={
+                                            staged
+                                                ? Loc.rowActions.staged
+                                                : Loc.rowActions.removeMemberAria(member, role.name)
+                                        }
+                                        aria-label={Loc.rowActions.removeMemberAria(
+                                            member,
+                                            role.name,
+                                        )}
+                                        onClick={() =>
+                                            context?.stageChange({
+                                                kind: "serverRoleMembership",
+                                                action: "DROP",
+                                                role: role.name,
+                                                member,
+                                            })
+                                        }>
+                                        {member} ×
+                                    </Button>
+                                );
+                            })}
+                        </div>
+                    );
+                },
             }),
         ],
-        [styles],
+        [styles, context, pending],
     );
 
     return (

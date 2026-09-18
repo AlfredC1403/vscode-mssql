@@ -2,9 +2,10 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useEffect, useMemo, useState } from "react";
+import { useContext, useEffect, useMemo, useState } from "react";
 import {
     Badge,
+    Button,
     Dropdown,
     Option,
     OptionGroup,
@@ -20,6 +21,7 @@ import {
 } from "../../sharedInterfaces/permissionMatrix";
 import { SectionState } from "../../sharedInterfaces/adminPanel";
 import { DataTable } from "../common/dataTable";
+import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
 
@@ -65,6 +67,9 @@ const useStyles = makeStyles({
         fontSize: "12px",
         color: "var(--vscode-descriptionForeground)",
     },
+    action: {
+        minWidth: "auto",
+    },
 });
 
 /** Color de la insignia del estado. `DENY` en rojo, siempre visible. */
@@ -109,7 +114,9 @@ function describeOrigin(permission: EffectivePermission): string {
 /** Matriz de permisos efectivos de un principal (§10 del brief), en solo lectura. */
 export const PermissionMatrixView = () => {
     const styles = useStyles();
+    const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.databasePermissions);
+    const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
     const database = useAdminPanelSelector((state) => state?.selectedDatabase);
     const [principal, setPrincipal] = useState<string | undefined>(undefined);
 
@@ -192,8 +199,70 @@ export const PermissionMatrixView = () => {
                     </TableCellLayout>
                 ),
             }),
+            createTableColumn<EffectivePermission>({
+                columnId: "actions",
+                renderHeaderCell: () => Loc.sessions.columns.actions,
+                renderCell: (permission) => {
+                    const direct = permission.via.length === 0;
+                    // Las clases que M4 muestra y M5 no sabe expresar salen sin acción, con motivo.
+                    const supported =
+                        permission.securableClass === "DATABASE" ||
+                        permission.securableClass === "SCHEMA" ||
+                        permission.securableClass === "OBJECT_OR_COLUMN";
+                    const staged = pending.some(
+                        (change) =>
+                            change.kind === "databasePermission" &&
+                            change.subject === `${permission.principal} · ${permission.permission}`,
+                    );
+                    const grantable = permission.state === "GRANT_WITH_GRANT_OPTION";
+
+                    // Lo propio se revoca. Lo heredado no se puede revocar aquí —habría que quitarlo
+                    // del rol— pero sí se puede denegar explícitamente, que es lo que un DBA hace
+                    // para cortar un permiso heredado sin tocar el rol.
+                    const action = direct ? "REVOKE" : "DENY";
+                    const disabled = !supported || staged || (direct && grantable);
+
+                    return (
+                        <Button
+                            className={styles.action}
+                            size="small"
+                            appearance="subtle"
+                            disabled={disabled}
+                            title={
+                                !supported
+                                    ? Loc.rowActions.notSupported
+                                    : direct && grantable
+                                      ? Loc.rowActions.grantableNeedsCascade
+                                      : staged
+                                        ? Loc.rowActions.staged
+                                        : direct
+                                          ? undefined
+                                          : Loc.rowActions.inheritedOnly
+                            }
+                            aria-label={
+                                direct
+                                    ? Loc.rowActions.revokeAria(permission.permission)
+                                    : Loc.rowActions.denyAria(permission.permission)
+                            }
+                            onClick={() =>
+                                context?.stageChange({
+                                    kind: "databasePermission",
+                                    action,
+                                    permission: permission.permission,
+                                    principal: permission.principal,
+                                    securableClass: permission.securableClass,
+                                    securable: permission.securable,
+                                    columnName: permission.columnName || undefined,
+                                    grantable,
+                                })
+                            }>
+                            {direct ? Loc.rowActions.revoke : Loc.rowActions.deny}
+                        </Button>
+                    );
+                },
+            }),
         ],
-        [styles],
+        [styles, context, pending],
     );
 
     const inheritedCount = permissions.filter((permission) => permission.via.length > 0).length;
@@ -270,7 +339,8 @@ export const PermissionMatrixView = () => {
                         permission: { minWidth: 240, defaultWidth: 340 },
                         securable: { minWidth: 200, defaultWidth: 260 },
                         state: { minWidth: 150, defaultWidth: 170 },
-                        origin: { minWidth: 240, defaultWidth: 340 },
+                        origin: { minWidth: 220, defaultWidth: 300 },
+                        actions: { minWidth: 110, defaultWidth: 120 },
                     }}
                 />
             ) : (

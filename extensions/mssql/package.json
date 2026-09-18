@@ -1895,6 +1895,31 @@
             "type": "object",
             "title": "%mssql.Configuration%",
             "properties": {
+                "sqlworks.productionServers": {
+                    "type": "object",
+                    "scope": "application",
+                    "description": "Servidores de producción. SQLWorks los marca en el panel de administración y exige escribir el nombre del objeto antes de ejecutar cualquier cambio. El ámbito es «application» a propósito: así el settings.json de un repositorio no puede desmarcar un servidor de producción.",
+                    "default": {
+                        "connectionIds": [],
+                        "serverPatterns": []
+                    },
+                    "properties": {
+                        "connectionIds": {
+                            "type": "array",
+                            "description": "Identificadores de perfiles de conexión guardados. Es la forma estable de identificar una conexión.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "serverPatterns": {
+                            "type": "array",
+                            "description": "Patrones sobre el nombre del servidor, con * como comodín. Para conexiones sin perfil guardado, que no tienen identificador.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
                 "mssql.enableExperimentalFeatures": {
                     "type": "boolean",
                     "default": false,

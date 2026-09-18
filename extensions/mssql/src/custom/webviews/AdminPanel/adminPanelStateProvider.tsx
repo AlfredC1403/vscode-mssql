@@ -9,6 +9,7 @@ import {
     AdminPanelReducers,
     AdminPanelState,
     AdminSection,
+    StageChangeRequest,
 } from "../../sharedInterfaces/adminPanel";
 import { useVscodeWebview } from "../../../webviews/common/vscodeWebviewProvider";
 import { getCoreRPCs } from "../../../webviews/common/utils";
@@ -31,6 +32,14 @@ export interface AdminPanelContextProps extends CoreRPCs {
      * nombre con el que el host construye las consultas de catálogo.
      */
     selectDatabase: (database: string) => void;
+    /** Monta un cambio en la lista de pendientes. **No ejecuta nada.** */
+    stageChange: (request: StageChangeRequest) => void;
+    unstageChange: (id: string) => void;
+    clearChanges: () => void;
+    buildPreview: () => void;
+    /** Ejecuta el plan, identificado por su nonce. Desde aquí no se manda T-SQL. */
+    applyChanges: (previewId: string) => void;
+    copyScriptToEditor: () => void;
 }
 
 const AdminPanelContext = createContext<AdminPanelContextProps | undefined>(undefined);
@@ -52,6 +61,13 @@ const AdminPanelStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
             killSession: (sessionId: number) => extensionRpc.action("killSession", { sessionId }),
             selectDatabase: (database: string) =>
                 extensionRpc.action("selectDatabase", { database }),
+            stageChange: (request: StageChangeRequest) =>
+                extensionRpc.action("stageChange", { request }),
+            unstageChange: (id: string) => extensionRpc.action("unstageChange", { id }),
+            clearChanges: () => extensionRpc.action("clearChanges", {}),
+            buildPreview: () => extensionRpc.action("buildPreview", {}),
+            applyChanges: (previewId: string) => extensionRpc.action("applyChanges", { previewId }),
+            copyScriptToEditor: () => extensionRpc.action("copyScriptToEditor", {}),
         }),
         [extensionRpc],
     );

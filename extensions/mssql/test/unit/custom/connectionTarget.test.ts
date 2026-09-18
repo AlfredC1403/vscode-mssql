@@ -2,13 +2,19 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
+import * as chai from "chai";
 import { expect } from "chai";
 import * as sinon from "sinon";
+import sinonChai from "sinon-chai";
 
 import ConnectionManager from "../../../src/controllers/connectionManager";
 import { TreeNodeInfo } from "../../../src/objectExplorer/nodes/treeNodeInfo";
 import { resolveConnectionTarget } from "../../../src/custom/util/connectionTarget";
 import { Strings } from "../../../src/custom/strings";
+
+// Se registra aquí, como en el resto de la suite del upstream: cada fichero lo hace por su cuenta,
+// para que ejecutarlo suelto (`--grep`, un solo fichero) dé el mismo resultado que la suite entera.
+chai.use(sinonChai);
 
 const SERVER = "sql-dev-01";
 const CONNECTION_URI = "connection:sql-dev-01";

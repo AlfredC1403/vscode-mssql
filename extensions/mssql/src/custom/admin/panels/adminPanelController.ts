@@ -24,7 +24,29 @@ import { AdminQueryRunner } from "../sql/execute";
 import { ServerSecurityService, SectionResult } from "../serverSecurityService";
 import { DatabaseSecurityService } from "../databaseSecurityService";
 import { SessionAdminService } from "../sessionAdminService";
+import { ChangeSetService } from "../changeSetService";
 import { isValidIdentifier } from "../../util/identifiers";
+import {
+    ExecutionPlan,
+    PlannedStatement,
+    renderReadableScript,
+    validatePlan,
+} from "../sql/ddl/plan";
+import { buildTransactionalBatch } from "../sql/writeGate";
+import { stageRequestToStatement } from "./stageChange";
+import { confirmByTypingName, confirmPlan } from "./writeConfirm";
+import {
+    ChangeSetResult,
+    PendingChange,
+    PreviewFacts,
+    ProductionState,
+} from "../../sharedInterfaces/pendingChanges";
+import {
+    PRODUCTION_SETTING_KEY,
+    ProductionServersSetting,
+    evaluateProduction,
+    isSettingEmpty,
+} from "../../util/production";
 import { buildKillStatement, canKillSessions, isSameSession } from "../sql/queries/killSession";
 import { ActiveSession, KillPermissions } from "../sql/types";
 import { formatSeconds } from "../../sharedInterfaces/duration";
@@ -64,6 +86,24 @@ export class AdminPanelController extends WebviewPanelController<
     private readonly security: ServerSecurityService;
     private readonly databaseSecurity: DatabaseSecurityService;
     private readonly sessionAdmin: SessionAdminService;
+    private readonly changeSet: ChangeSetService;
+
+    /**
+     * El plan vivo, guardado **solo en el host**, con su nonce.
+     *
+     * El webview nunca manda T-SQL: manda el nonce. Así «lo ejecutado es lo previsualizado» no es una
+     * promesa, es la única forma en que el código puede funcionar (regla 11.1 del brief).
+     */
+    private currentPlan?: ExecutionPlan;
+    /**
+     * Las sentencias construidas, por identificador de cambio. **Viven solo en el host**: al webview
+     * se le publica el texto para mostrarlo, pero el T-SQL que se ejecuta sale siempre de aquí.
+     */
+    private readonly plannedStatements = new Map<string, PlannedStatement>();
+    /** Contador de los identificadores de los cambios pendientes. Estable para los tests. */
+    private changeCounter = 0;
+    /** Contador de los nonces de plan. Cada vista previa genera uno nuevo. */
+    private planCounter = 0;
 
     private constructor(
         context: vscode.ExtensionContext,
@@ -88,7 +128,9 @@ export class AdminPanelController extends WebviewPanelController<
         this.security = new ServerSecurityService(runner);
         this.databaseSecurity = new DatabaseSecurityService(runner);
         this.sessionAdmin = new SessionAdminService(runner);
+        this.changeSet = new ChangeSetService(runner);
         this.registerReducers();
+        this.publishProductionState();
         // El selector de bases se llena en cuanto abre el panel: es una sola consulta a
         // `sys.databases` y sin ella no se puede cambiar de base.
         void this.loadDatabases();
@@ -130,6 +172,7 @@ export class AdminPanelController extends WebviewPanelController<
                 databaseRoles: idleSection(),
                 schemas: idleSection(),
                 databasePermissions: idleSection(),
+                pendingChanges: [],
             },
             resolved.connectionUri,
         );
@@ -174,6 +217,83 @@ export class AdminPanelController extends WebviewPanelController<
             return this.state;
         });
 
+        // --- Cambios pendientes (M5) ---
+
+        this.registerReducer("stageChange", (state, payload) => {
+            const staged = stageRequestToStatement(payload.request, state.selectedDatabase);
+            if (staged.errorMessage || !staged.statement || !staged.change) {
+                void vscode.window.showErrorMessage(
+                    staged.errorMessage ?? Strings.adminPanel.unknownSection,
+                );
+                return state;
+            }
+
+            this.changeCounter += 1;
+            const change: PendingChange = { ...staged.change, id: `cambio-${this.changeCounter}` };
+            this.plannedStatements.set(change.id, staged.statement);
+
+            // Montar un cambio invalida el plan **en el host**, no solo en el webview: si solo se
+            // borrara la vista previa, un nonce viejo seguiría coincidiendo con el plan guardado y
+            // se podría ejecutar una lista que ya no es la que se mostró.
+            this.currentPlan = undefined;
+            return {
+                ...state,
+                pendingChanges: [...state.pendingChanges, change],
+                preview: undefined,
+                lastResult: undefined,
+            };
+        });
+
+        this.registerReducer("unstageChange", (state, payload) => {
+            this.plannedStatements.delete(payload.id);
+            this.currentPlan = undefined;
+            return {
+                ...state,
+                pendingChanges: state.pendingChanges.filter((change) => change.id !== payload.id),
+                preview: undefined,
+            };
+        });
+
+        this.registerReducer("clearChanges", (state) => {
+            this.plannedStatements.clear();
+            this.currentPlan = undefined;
+            return { ...state, pendingChanges: [], preview: undefined, lastResult: undefined };
+        });
+
+        this.registerReducer("buildPreview", (state) => {
+            const built = this.buildPlan(state);
+            if (built.errorMessage) {
+                void vscode.window.showErrorMessage(built.errorMessage);
+                return { ...state, preview: undefined };
+            }
+            this.currentPlan = built.plan;
+            return { ...state, preview: toPreviewFacts(built.plan) };
+        });
+
+        this.registerReducer("applyChanges", async (state, payload) => {
+            await this.applyChanges(state, payload.previewId);
+            // `applyChanges` publica el estado por su cuenta: resultado y relectura.
+            return this.state;
+        });
+
+        this.registerReducer("copyScriptToEditor", async (state) => {
+            const built = this.buildPlan(state);
+            if (built.errorMessage) {
+                void vscode.window.showErrorMessage(built.errorMessage);
+                return state;
+            }
+            const header = Strings.writeGate.scriptDocumentHeader(
+                state.target?.server ?? "",
+                state.selectedDatabase,
+            );
+            const document = await vscode.workspace.openTextDocument({
+                language: "sql",
+                content: `${header}\n${renderReadableScript(built.plan)}\n`,
+            });
+            await vscode.window.showTextDocument(document, { preview: false });
+            return state;
+        });
+
         this.registerReducer("selectDatabase", (state, payload) => {
             const database = payload.database;
             // Salvaguarda: el nombre acaba dentro de una consulta, así que se valida antes de
@@ -188,11 +308,201 @@ export class AdminPanelController extends WebviewPanelController<
             for (const section of DATABASE_SECTIONS) {
                 next[SECTION_STATE_KEYS[section]] = idleSection() as never;
             }
+
+            // Los cambios de ámbito de base se montaron contra la base anterior, así que dejan de
+            // valer: se descartan con aviso visible en lugar de ejecutarse contra la base nueva.
+            const dropped = state.pendingChanges.filter((change) => change.scope !== "Servidor");
+            if (dropped.length > 0) {
+                for (const change of dropped) {
+                    this.plannedStatements.delete(change.id);
+                }
+                next.pendingChanges = state.pendingChanges.filter(
+                    (change) => change.scope === "Servidor",
+                );
+                next.preview = undefined;
+                this.currentPlan = undefined;
+                void vscode.window.showWarningMessage(
+                    Strings.adminPanel.pendingChangesDropped(dropped.length, database),
+                );
+            }
             if (isDatabaseSection(state.activeSection)) {
                 void this.loadSection(state.activeSection, database);
             }
             return next;
         });
+    }
+
+    /**
+     * Construye el plan a partir de la lista de cambios pendientes.
+     *
+     * El plan se calcula **en el host** y se guarda con un nonce nuevo. Cualquier cambio en la lista
+     * genera otro nonce, así que un plan viejo no se puede ejecutar (regla 11.1 del brief).
+     */
+    private buildPlan(state: AdminPanelState): { plan?: ExecutionPlan; errorMessage?: string } {
+        if (state.pendingChanges.length === 0) {
+            return { errorMessage: Strings.writeGate.planEmpty };
+        }
+
+        const statements: PlannedStatement[] = [];
+        for (const change of state.pendingChanges) {
+            const statement = this.plannedStatements.get(change.id);
+            if (!statement) {
+                return { errorMessage: Strings.writeGate.planExpired };
+            }
+            statements.push(statement);
+        }
+
+        const destructive = state.pendingChanges.filter((change) => change.destructive);
+        const production = state.productionState?.production ?? false;
+
+        this.planCounter += 1;
+        const plan: ExecutionPlan = {
+            id: `plan-${this.planCounter}`,
+            title: Strings.writeGate.planTitle(statements.length),
+            statements,
+            irreversible: [],
+            // Escribir el nombre: lo destructivo siempre, y todo cambio en un servidor marcado como
+            // de producción (reglas 11.4 y 11.5 del brief).
+            typeToConfirm:
+                destructive.length > 0
+                    ? destructive[0].subject
+                    : production
+                      ? (state.target?.server ?? undefined)
+                      : undefined,
+            production,
+        };
+
+        const problem = validatePlan(plan);
+        return problem ? { errorMessage: Strings.writeGate.planInvalid(problem) } : { plan };
+    }
+
+    /**
+     * Aplica los cambios pendientes.
+     *
+     * El orden es el que exige el §11 del brief:
+     *
+     * 1. El nonce tiene que coincidir con el plan vivo. Si la lista cambió, no se ejecuta nada.
+     * 2. Se muestra **el lote completo** y se pide confirmación.
+     * 3. Si hay algo destructivo, o el servidor está marcado como de producción, hay que **escribir
+     *    el nombre**.
+     * 4. Solo entonces se abre la transacción y se ejecuta: nunca antes del diálogo, para no retener
+     *    bloqueos con una ventana abierta en pantalla.
+     * 5. Se relee la sección visible y se publica el estado por cambio.
+     *
+     * **No se comprueban los permisos de escritura antes de ejecutar**, y es deliberado:
+     * `HAS_PERMS_BY_NAME(NULL, NULL, 'ALTER ANY USER')` devuelve **NULL** en lugar de 0 —medido—, así
+     * que una comprobación previa mal interpretada bloquearía incluso a `sa`. La transacción hace
+     * inocuo el fallo de permisos: se revierte todo y el panel muestra el mensaje del motor.
+     */
+    private async applyChanges(state: AdminPanelState, previewId: string): Promise<void> {
+        const plan = this.currentPlan;
+        if (!plan || plan.id !== previewId) {
+            void vscode.window.showWarningMessage(Strings.writeGate.planExpired);
+            return;
+        }
+
+        if (!(await confirmPlan(plan))) {
+            return;
+        }
+
+        if (plan.typeToConfirm) {
+            const what = state.pendingChanges.some((change) => change.destructive)
+                ? "del objeto que se va a borrar"
+                : "del servidor de producción";
+            if (!(await confirmByTypingName(plan.typeToConfirm, what))) {
+                return;
+            }
+        }
+
+        const result = await this.changeSet.apply(plan, state.pendingChanges);
+        if (this.isDisposed) {
+            return;
+        }
+
+        this.report(result);
+
+        // Se relee la sección visible. Si la relectura falla, hay que decirlo: la pantalla puede no
+        // reflejar el servidor.
+        if (result.outcome === "applied") {
+            this.plannedStatements.clear();
+            this.currentPlan = undefined;
+            this.state = {
+                ...this.state,
+                pendingChanges: [],
+                preview: undefined,
+                lastResult: result,
+            };
+            await this.reloadAfterApply(result);
+        } else {
+            this.state = { ...this.state, preview: undefined, lastResult: result };
+        }
+    }
+
+    /** Relee la sección visible tras aplicar, y marca el resultado si la relectura falla. */
+    private async reloadAfterApply(result: ChangeSetResult): Promise<void> {
+        const section = this.state.activeSection;
+        if (section === AdminSection.Overview) {
+            return;
+        }
+        await this.loadSection(section);
+        if (this.isDisposed) {
+            return;
+        }
+
+        const reloaded = this.state[SECTION_STATE_KEYS[section]] as SectionState<unknown>;
+        if (reloaded?.status === "error") {
+            void vscode.window.showWarningMessage(Strings.writeGate.staleAfterApply);
+            this.state = {
+                ...this.state,
+                lastResult: { ...result, staleAfterApply: true },
+            };
+        }
+    }
+
+    /** Cuenta lo que pasó, con el mensaje propio del número de error cuando lo hay. */
+    private report(result: ChangeSetResult): void {
+        const detail =
+            Strings.writeGate.engineError[result.errorNumber] ?? result.errorMessage ?? "";
+
+        switch (result.outcome) {
+            case "applied":
+                void vscode.window.showInformationMessage(
+                    Strings.writeGate.applied(result.statuses.length),
+                );
+                return;
+            case "rolledBack":
+                void vscode.window.showErrorMessage(
+                    Strings.writeGate.rolledBack(result.failedLabel, detail),
+                );
+                return;
+            case "inheritedTransaction":
+                void vscode.window.showWarningMessage(Strings.writeGate.inheritedTransaction);
+                return;
+            default:
+                void vscode.window.showWarningMessage(Strings.writeGate.unknown(detail));
+        }
+    }
+
+    /**
+     * Lee el ajuste de servidores de producción y publica la marca.
+     *
+     * El ajuste tiene `scope: "application"`, así que solo se lee de los ajustes de usuario: el
+     * `settings.json` de un repositorio no puede desmarcar un servidor de producción.
+     */
+    private publishProductionState(): void {
+        const setting = vscode.workspace
+            .getConfiguration()
+            .get<ProductionServersSetting>(PRODUCTION_SETTING_KEY);
+        const target = this.state.target;
+        const verdict = evaluateProduction(target?.profileId, target?.server ?? "", setting);
+
+        const productionState: ProductionState = {
+            production: verdict.production,
+            matchedPattern: verdict.matchedPattern,
+            // Que no haya nada marcado tiene que ser visible, no silencioso.
+            settingEmpty: isSettingEmpty(setting),
+        };
+        this.state = { ...this.state, productionState };
     }
 
     /** Llena el selector de bases de datos. Su fallo no rompe nada más del panel. */
@@ -418,4 +728,22 @@ export class AdminPanelController extends WebviewPanelController<
     ): void {
         this.state = { ...this.state, [key]: value } as AdminPanelState;
     }
+}
+
+/**
+ * Los **hechos** del plan que se publican al webview.
+ *
+ * Se publican los dos textos —el legible y el que se envía de verdad— porque la regla 11.1 del brief
+ * exige mostrar el T-SQL, y mostrar una versión bonita de lo que se ejecuta no es mostrar lo que se
+ * ejecuta. El objeto del plan **no se publica**: para ejecutar, el webview devuelve el nonce.
+ */
+function toPreviewFacts(plan: ExecutionPlan): PreviewFacts {
+    return {
+        previewId: plan.id,
+        readableScript: renderReadableScript(plan),
+        exactBatch: buildTransactionalBatch(plan.statements),
+        statementCount: plan.statements.length,
+        typeToConfirm: plan.typeToConfirm ?? "",
+        production: plan.production,
+    };
 }

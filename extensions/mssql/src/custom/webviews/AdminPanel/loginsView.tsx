@@ -2,11 +2,18 @@
  *  Fork interno (SQLWorks). Código propio, no del upstream.
  *--------------------------------------------------------------------------------------------*/
 
-import { useMemo } from "react";
-import { Badge, TableCellLayout, createTableColumn, makeStyles } from "@fluentui/react-components";
+import { useContext, useMemo } from "react";
+import {
+    Badge,
+    Button,
+    TableCellLayout,
+    createTableColumn,
+    makeStyles,
+} from "@fluentui/react-components";
 
 import { Login } from "../../admin/sql/types";
 import { DataTable } from "../common/dataTable";
+import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
 import { WebviewStrings as Loc } from "../strings";
 
@@ -24,12 +31,29 @@ const useStyles = makeStyles({
         overflow: "hidden",
         textOverflow: "ellipsis",
     },
+    action: {
+        minWidth: "auto",
+    },
 });
+
+/**
+ * Logins que SQL Server necesita para funcionar. Deshabilitar `sa` o una cuenta de servicio deja la
+ * instancia o la propia extensión sin poder conectarse, así que el panel no ofrece el botón.
+ */
+const PROTECTED_LOGINS = new Set(["sa", "NT AUTHORITY\\SYSTEM", "NT SERVICE\\SQLSERVERAGENT"]);
+
+function isProtected(login: string): boolean {
+    return (
+        PROTECTED_LOGINS.has(login) || login.startsWith("NT SERVICE\\") || login.startsWith("##")
+    );
+}
 
 /** Logins del servidor (§8.1 del brief), en solo lectura. */
 export const LoginsView = () => {
     const styles = useStyles();
+    const context = useContext(AdminPanelContext);
     const section = useAdminPanelSelector((state) => state?.logins);
+    const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
 
     const columns = useMemo(
         () => [
@@ -103,8 +127,44 @@ export const LoginsView = () => {
                     </TableCellLayout>
                 ),
             }),
+            createTableColumn<Login>({
+                columnId: "actions",
+                renderHeaderCell: () => Loc.sessions.columns.actions,
+                renderCell: (login) => {
+                    const staged = pending.some(
+                        (change) => change.kind === "loginEnabled" && change.subject === login.name,
+                    );
+                    const protectedLogin = isProtected(login.name);
+
+                    return (
+                        <Button
+                            className={styles.action}
+                            size="small"
+                            appearance="subtle"
+                            disabled={protectedLogin || staged}
+                            title={
+                                protectedLogin
+                                    ? Loc.rowActions.protectedLogin
+                                    : staged
+                                      ? Loc.rowActions.staged
+                                      : undefined
+                            }
+                            aria-label={Loc.rowActions.toggleAria(login.name, login.disabled)}
+                            onClick={() =>
+                                context?.stageChange({
+                                    kind: "loginEnabled",
+                                    login: login.name,
+                                    enabled: login.disabled,
+                                    createDate: login.createDate,
+                                })
+                            }>
+                            {login.disabled ? Loc.rowActions.enable : Loc.rowActions.disable}
+                        </Button>
+                    );
+                },
+            }),
         ],
-        [styles],
+        [styles, context, pending],
     );
 
     return (
@@ -130,7 +190,8 @@ export const LoginsView = () => {
                 status: { minWidth: 100, defaultWidth: 120 },
                 defaultDatabase: { minWidth: 120, defaultWidth: 150 },
                 policy: { minWidth: 110, defaultWidth: 130 },
-                roles: { minWidth: 160, defaultWidth: 240 },
+                roles: { minWidth: 160, defaultWidth: 220 },
+                actions: { minWidth: 120, defaultWidth: 130 },
             }}
         />
     );

@@ -42,6 +42,11 @@ export const Strings = {
          */
         invalidDatabaseName:
             "El nombre de la base de datos seleccionada no es válido para SQL Server, así que no se consultó nada.",
+        /** Al cambiar de base, los cambios montados contra la anterior dejan de valer. */
+        pendingChangesDropped: (count: number, database: string) =>
+            count === 1
+                ? `Se descartó 1 cambio pendiente: se montó contra otra base de datos y ahora el panel apunta a ${database}.`
+                : `Se descartaron ${count} cambios pendientes: se montaron contra otra base de datos y ahora el panel apunta a ${database}.`,
     },
     /**
      * Terminación de sesiones. Es la primera operación del fork que **escribe** en el servidor, así
@@ -87,5 +92,68 @@ export const Strings = {
         /** El servidor rechazó el `KILL`. */
         failed: (sessionId: number, reason: string) =>
             `No se pudo terminar la sesión ${sessionId}: ${reason}`,
+    },
+    /**
+     * Textos de la puerta de escritura: lo que se ve antes de que el fork escriba en el servidor, y
+     * lo que se ve después.
+     */
+    writeGate: {
+        /** Título del diálogo de confirmación. */
+        planTitle: (count: number) =>
+            count === 1 ? "¿Aplicar 1 cambio?" : `¿Aplicar ${count} cambios?`,
+        confirmIntro: (count: number) =>
+            count === 1
+                ? "Se ejecutará esta sentencia:"
+                : `Se ejecutarán estas ${count} sentencias, en este orden:`,
+        confirmAction: (count: number) =>
+            count === 1 ? "Aplicar 1 cambio" : `Aplicar ${count} cambios`,
+        /** Lo que garantiza el envoltorio transaccional, dicho con palabras. */
+        transactionalNote:
+            "Todo va en una sola transacción: si una sentencia falla, se revierten todas y el servidor queda como está ahora.",
+        /**
+         * Aviso de las sentencias que SQL Server no permite dentro de una transacción. Mismas
+         * palabras que el diálogo de terminar sesión, a propósito.
+         */
+        irreversibleWarning:
+            "Es irreversible: SQL Server no permite estas sentencias dentro de una transacción, así que no hay vuelta atrás con un ROLLBACK.",
+        /** Aviso extra de la regla 11.4, cuando el servidor está marcado como de producción. */
+        productionWarning: "ATENCIÓN: este servidor está marcado como de producción.\n",
+        /** Caja de texto de la regla 11.5. */
+        typeNameTitle: (what: string) => `Confirmar: escribe el nombre ${what}`,
+        typeNamePrompt: (name: string) =>
+            `Escribe «${name}» para confirmar. Es la última comprobación antes de ejecutar.`,
+        typeNameMismatch: (name: string) => `Tiene que coincidir exactamente con «${name}».`,
+        /** Resultados. */
+        applied: (count: number) =>
+            count === 1 ? "1 cambio aplicado." : `${count} cambios aplicados.`,
+        rolledBack: (label: string, reason: string) =>
+            `No se aplicó nada. Falló «${label}» y se revirtió la transacción entera: ${reason}`,
+        inheritedTransaction:
+            "No se ejecutó nada: la conexión ya tenía una transacción abierta, y el panel no confirma ni revierte una transacción que no es suya.",
+        unknown: (reason: string) =>
+            `No se pudo confirmar qué quedó aplicado: ${reason} Vuelve a leer la sección antes de repetir el cambio.`,
+        /** La relectura posterior falló: la pantalla puede no reflejar el servidor. */
+        staleAfterApply:
+            "El cambio se aplicó, pero la relectura falló: lo que se ve en pantalla puede no ser lo que hay en el servidor.",
+        /** Salvaguardas del plan. */
+        planExpired:
+            "La lista de cambios cambió desde que se generó la vista previa, así que no se ejecutó nada. Vuelve a revisarla.",
+        planEmpty: "No hay ningún cambio pendiente que aplicar.",
+        planInvalid: (reason: string) => `El plan no se puede ejecutar: ${reason}`,
+        /** Mensajes propios por número de error del motor. */
+        engineError: {
+            226: "SQL Server no permite esa sentencia dentro de una transacción. Es un fallo del panel al construir el lote, no algo que puedas arreglar desde aquí.",
+            574: "SQL Server no permite borrar una base de datos dentro de una transacción. Es un fallo del panel al construir el lote.",
+            3930: "La transacción quedó condenada y solo se pudo revertir.",
+            4621: "Ese permiso es de ámbito de servidor y solo se puede conceder desde master.",
+            6115: "SQL Server no permite terminar una sesión dentro de una transacción.",
+            15151: "El principal al que se refiere el cambio ya no existe, o no se puede ver con estos permisos.",
+            50001: "El objeto ya no es el mismo que se leyó: se borró y se volvió a crear, o no existe.",
+            50002: "La fila que se iba a cambiar ya no está como se leyó.",
+            50003: "Alguien hizo ese cambio, o el contrario, mientras el panel estaba abierto.",
+        } as Record<number, string>,
+        /** Abrir el script en un editor. */
+        scriptDocumentHeader: (server: string, database: string) =>
+            `-- SQLWorks · vista previa del cambio\n-- Servidor: ${server}\n-- Base de datos: ${database}\n-- Este editor NO está conectado: es una copia para revisar, no para ejecutar.\n`,
     },
 } as const;

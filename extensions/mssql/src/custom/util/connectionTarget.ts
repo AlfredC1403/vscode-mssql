@@ -67,6 +67,7 @@ export function resolveConnectionTarget(
                 ObjectExplorerUtils.getDatabaseName(node) || Strings.adminPanel.defaultDatabase,
             authenticationType: profile.authenticationType,
             profileName: profile.profileName || undefined,
+            profileId: profile.id || undefined,
             userName: profile.user || undefined,
             serverVersion: serverInfo?.serverVersion,
             serverEdition: serverInfo?.serverEdition,

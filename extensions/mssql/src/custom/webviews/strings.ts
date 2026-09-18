@@ -278,6 +278,70 @@ export const WebviewStrings = {
         systemSchema: "sistema",
         legend: "Marcados los esquemas de SQL Server y los de los roles fijos.",
     },
+    /** Cajón de cambios pendientes y marca de producción (M5). */
+    pendingChanges: {
+        title: (count: number) =>
+            count === 1 ? "1 cambio pendiente" : `${count} cambios pendientes`,
+        review: "Revisar y aplicar",
+        apply: (count: number) => (count === 1 ? "Aplicar 1 cambio" : `Aplicar ${count} cambios`),
+        openInEditor: "Abrir en un editor",
+        discardAll: "Descartar todo",
+        discardOne: "Quitar este cambio",
+        discardOneAria: (subject: string) => `Quitar el cambio de ${subject}`,
+        showExact: "Ver el texto exacto que se envía al servidor",
+        hideExact: "Ocultar el texto exacto",
+        willAskToType: (name: string) =>
+            `Antes de ejecutar habrá que escribir «${name}» para confirmar.`,
+        lastFailed:
+            "El último intento no se aplicó: la transacción se revirtió y el servidor quedó como estaba. Revisa el motivo y vuelve a intentarlo.",
+        stale: "Se aplicó, pero la relectura falló: lo que ves puede no ser lo que hay en el servidor.",
+        statuses: {
+            pending: "Sin ejecutar",
+            applied: "Aplicado",
+            rolledBack: "No se aplicó: la transacción se revirtió entera",
+            failed: "Es el que falló",
+            unknown: "No se sabe si quedó aplicado",
+        } as Record<string, string>,
+    },
+    production: {
+        badge: "PRODUCCIÓN",
+        matchedProfile: "Este perfil de conexión está en la lista de servidores de producción.",
+        matchedPattern: (pattern: string) =>
+            `El nombre del servidor encaja con el patrón «${pattern}» de la lista de servidores de producción.`,
+        notConfigured:
+            "Ningún servidor está marcado como de producción: el ajuste sqlworks.productionServers está vacío.",
+        settingKey:
+            "Configúralo en sqlworks.productionServers, en los ajustes de usuario. El panel marcará esos servidores y exigirá escribir el nombre antes de cualquier cambio.",
+    },
+    /** Acciones de escritura que ofrecen las rejillas (M5). */
+    rowActions: {
+        revoke: "Revocar",
+        revokeAria: (what: string) => `Revocar ${what}`,
+        deny: "Denegar",
+        denyAria: (what: string) => `Denegar ${what}`,
+        enable: "Habilitar",
+        disable: "Deshabilitar",
+        toggleAria: (login: string, enable: boolean) =>
+            enable ? `Habilitar el login ${login}` : `Deshabilitar el login ${login}`,
+        dropUser: "Borrar",
+        dropUserWarning:
+            "Pedirá escribir el nombre del usuario antes de ejecutar: es una operación destructiva.",
+        dropUserAria: (user: string) => `Borrar el usuario ${user}`,
+        removeMember: "Quitar",
+        removeMemberAria: (member: string, role: string) => `Quitar ${member} del rol ${role}`,
+        /** Por qué una fila no ofrece acción. */
+        systemObject: "Los objetos que crea SQL Server no se cambian desde el panel.",
+        /** Deshabilitar sa o una cuenta de servicio deja la instancia sin poder conectarse. */
+        protectedLogin:
+            "Este login lo necesita SQL Server o la propia extensión para conectarse: el panel no lo deshabilita.",
+        inheritedOnly:
+            "Este permiso es heredado de un rol: se puede denegar aquí, pero para quitarlo hay que quitarlo del rol.",
+        notSupported: "Este tipo de permiso se puede ver, pero todavía no se puede cambiar.",
+        /** Revocar un permiso concedible exige CASCADE, y eso no se decide en una casilla. */
+        grantableNeedsCascade:
+            "Está concedido con opción de conceder: revocarlo exige CASCADE, que también revocaría lo que ese principal haya concedido a otros. No se hace desde el panel.",
+        staged: "Ya está en la lista de cambios pendientes.",
+    },
     permissionMatrix: {
         principalLabel: "Principal",
         principalPlaceholder: "Elige un usuario o rol",

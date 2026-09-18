@@ -3,9 +3,10 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { AdminQueryRunner } from "./sql/execute";
+import { WriteGate } from "./sql/writeGate";
 import {
     KILL_PERMISSIONS_SQL,
-    buildKillStatement,
+    buildKillPlanStatement,
     buildSessionSnapshotStatement,
     mapKillPermissions,
     mapSessionSnapshot,
@@ -30,14 +31,21 @@ export interface KillOutcome {
 }
 
 /**
- * **El único sitio del fork que ejecuta algo que no es un `SELECT`.**
+ * Terminación de sesiones.
  *
  * Esta clase no pregunta ni confirma nada: eso lo hace `AdminPanelController`, que es quien muestra
- * la sentencia y pide confirmación antes de llamar a `kill` (regla 11.1 del brief). Aquí solo está
- * la ejecución, aislada a propósito para que auditar «qué escribe el fork» sea leer un archivo.
+ * la sentencia y pide confirmación antes de llamar a `kill` (regla 11.1 del brief).
+ *
+ * La ejecución **no vive aquí**: sale por `WriteGate`, la única puerta de escritura del fork. `KILL`
+ * es una sentencia de la vía suelta, porque SQL Server la rechaza dentro de una transacción de
+ * usuario con el error 6115, y por eso estrena esa vía en lugar del lote transaccional.
  */
 export class SessionAdminService {
-    constructor(private readonly runner: AdminQueryRunner) {}
+    private readonly gate: WriteGate;
+
+    constructor(private readonly runner: AdminQueryRunner) {
+        this.gate = new WriteGate(runner);
+    }
 
     /** Permisos de la conexión actual para terminar sesiones. */
     public async loadPermissions(): Promise<PermissionsOutcome> {
@@ -63,11 +71,13 @@ export class SessionAdminService {
     /**
      * Ejecuta `KILL`. **Solo se llama después de confirmar con el usuario.**
      *
-     * Va suelta, sin transacción: SQL Server rechaza `KILL` dentro de una transacción de usuario
-     * (error 6115). Ver `buildKillStatement`.
+     * Por la vía suelta de la puerta de escritura: sin transacción, porque SQL Server rechaza `KILL`
+     * dentro de una transacción de usuario (error 6115). Ver `buildKillPlanStatement`.
      */
-    public async kill(sessionId: number): Promise<KillOutcome> {
-        const outcome = await this.runner.tryRun(buildKillStatement(sessionId));
-        return outcome.errorMessage ? { errorMessage: outcome.errorMessage } : {};
+    public async kill(sessionId: number, label = ""): Promise<KillOutcome> {
+        const outcome = await this.gate.runStandalone(
+            buildKillPlanStatement(sessionId, label || `Terminar la sesión ${sessionId}`),
+        );
+        return outcome.applied ? {} : { errorMessage: outcome.errorMessage };
     }
 }
