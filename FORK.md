@@ -52,6 +52,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/tsconfig.webviews.json` | **M3, 1 línea**: incluye además `src/custom/admin/sql/types.ts` | Los tipos del dominio los fija el §9 del brief en esa ruta y el panel los pinta tal cual. No importan nada, así que compilan en los dos lados sin duplicarlos | M3 |
 | `extensions/mssql/package.json` | **M5**: el ajuste `sqlworks.productionServers` en `contributes.configuration.properties`, con `scope: "application"` | Regla 11.4 del brief. Un ajuste solo existe si está declarado aquí; el `scope` impide que el `settings.json` de un repositorio desmarque un servidor de producción (§22.7). Es el **único** archivo del upstream que M5 toca | M5 |
 | `extensions/mssql/package.json` | **M7**: la vista `sqlworksSnippets` (`type: "webview"`) dentro del contenedor `objectExplorer` que ya existe, el comando `sqlworks.showSnippets` y el ajuste `sqlworks.snippets.sharedLibraries` | Punto 12 del brief. Una vista y un comando solo existen si están declarados aquí. Va en el contenedor del upstream en lugar de crear otro, que sería una segunda barra para lo mismo. Es el **único** archivo del upstream que M7 toca | M7 |
+| `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 56 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -556,6 +557,12 @@ Consecuencias de 11.5 sobre el brief, que quedan formalmente derogadas:
 Lo que M8 sigue entregando, sin cambios: el perfil XML, los perfiles múltiples con selector, el
 panel de opciones con vista previa lado a lado, la importación desde los ajustes actuales, un
 test por opción, y las opciones no soportadas deshabilitadas en la interfaz con su mensaje.
+
+> **Corregido en §25 (M8).** De esa lista **se retiran tres cosas**, por decisión del usuario y por
+> lo medido: el **perfil XML** (los perfiles viven en `sqlworks.format.profiles`, §25.2), el **test
+> por opción** (probaría ScriptDom, que es código de Microsoft, §25.7) y las **opciones no
+> soportadas deshabilitadas** (el panel se guía por el `package.json`, así que solo existen las que
+> existen). Lo demás se entrega tal cual.
 
 ### 11.1. Punto de anclaje que el brief no previó
 
@@ -2334,3 +2341,183 @@ editor**, y que borrar pide confirmación y cancelar no borra.
   común y añadirla al ajuste, no un servicio.
 - **No valida el T-SQL del cuerpo.** Un snippet es una plantilla con huecos y no tiene por qué ser
   una sentencia válida por sí sola; comprobarlo exigiría un analizador, que el §16 prohíbe.
+
+---
+
+## 25. Formato: perfiles sobre el formateador del upstream (M8)
+
+La decisión 11.5 ya había dado por bueno **conservar el formateador del upstream** y construir solo
+lo que falta. M8 va un paso más allá y **retira también el perfil XML**, por decisión del usuario
+—que pidió expresamente valorar si no era mejor añadir lo que falta sobre el upstream— y por lo que
+salió al medir.
+
+El resultado: el fork **no sustituye el formateador, lo configura**. No hay proveedor de formato
+propio, no entra ninguna librería de formateo, y el T-SQL lo sigue formateando el parser real
+(ScriptDom) dentro del STS.
+
+### 25.1. La medida que decide el diseño
+
+Contra el STS real, hablando LSP por stdio:
+
+| Cómo se pasan las opciones de formato                | Resultado       |
+| ---------------------------------------------------- | --------------- |
+| En la petición `textDocument/formatting` (`options`) | **se ignoran**  |
+| Por `workspace/didChangeConfiguration`               | **se respetan** |
+
+Se probó con tres formas de nombrar la opción dentro de la petición y ninguna tuvo efecto; por
+configuración, `keywordCasing: lowercase` pasa las palabras clave a minúsculas y
+`commaPlacement: leading` mueve las comas al principio de línea, de forma inconfundible.
+
+**La primera versión de esta medida estaba mal hecha y decía que las dos vías se ignoraban.** El
+error era de la prueba, no del motor: se pedía `keywordCasing: uppercase` cuando la salida por
+omisión **ya venía en mayúsculas**, así que el cambio no se podía notar. Repetida con `lowercase`,
+la respuesta fue clara. Vale la pena dejarlo escrito: una medida que sale «no pasa nada» hay que
+mirarla dos veces antes de creérsela.
+
+Consecuencia directa: **aplicar un perfil es escribir `mssql.format.options.*`**. No hay vía por
+petición que controlemos sin interceptar la capacidad del LSP, que es el cambio caro que la regla de
+oro evita (§8.1).
+
+### 25.2. Por qué no hay perfil XML
+
+1. **El esquema ya existe, y mejor.** El `package.json` del upstream declara **55 opciones de
+   estilo** (56 ajustes `mssql.format.*` menos `showParseErrorNotification`, que es una preferencia
+   de notificaciones) con su tipo, sus valores posibles, su valor por omisión y su descripción. Un
+   XML sería una segunda descripción de lo mismo, escrita a mano.
+2. **Y el upstream se mueve.** Las 56 opciones entraron de golpe en dos commits de hace unos días
+   (§8). Cada opción nueva sería una línea que alguien tiene que acordarse de añadir al XML, y cada
+   renombrado un fallo silencioso.
+3. **El XML no podría ser la fuente de verdad**, por la medida de §25.1: el formateador solo lee de
+   la configuración. Sería una capa sobre `settings.json`, y una capa que no es la fuente de verdad
+   es un problema de sincronización esperando a ocurrir. FORK.md ya lo admitía como la contrapartida
+   honesta de §11.5.
+4. **Compartir en equipo ya está resuelto**: un `.vscode/settings.json` en el repositorio. Un XML
+   añadiría importar y exportar para llegar al mismo sitio.
+
+Lo que VS Code **no** da, y era lo valioso de la petición del brief, son **perfiles con nombre entre
+los que cambiar de un clic**. Eso es lo que entrega M8, en un ajuste propio
+(`sqlworks.format.profiles`), en el formato que el editor ya sabe leer, validar, editar y
+sincronizar.
+
+**Si aparecen perfiles XML de otra herramienta** (SSMS, dbForge, Visual Studio) que haya que
+importar, el sitio es un lector de una sola dirección que rellene el borrador del panel. Es aditivo
+y no cambia nada de lo anterior.
+
+### 25.3. El esquema se lee en tiempo de ejecución
+
+`format/schema.ts` lee `contributes.configuration.properties` del `package.json` de la extensión y
+deduce de cada opción su control (casilla, desplegable, número), su valor por omisión y su
+descripción. **No hay lista de opciones escrita a mano en el fork.** Cuando el upstream añada una,
+aparece en el panel sola.
+
+Lo que no se sabe pintar **se descarta en silencio**: es mejor no mostrar una opción que mostrar un
+control que miente y escribir un valor que el formateador no entiende. Hoy no se descarta ninguna:
+las 55 se leen, todas con descripción.
+
+Los grupos de la interfaz se deducen del nombre (`newLineBefore…`, `multiline…`, `…Casing`), que en
+el upstream son regulares. Un mapa de opción → grupo escrito a mano sería justo lo que este diseño
+evita; lo que no encaje cae en «Otras» y no se pierde.
+
+### 25.4. Un perfil guarda solo las desviaciones
+
+Un perfil no guarda las 55 opciones: guarda **lo que se desvía** de lo que declara el upstream. Tres
+razones, y las tres importan:
+
+- Un perfil se lee de un vistazo: «este pone las comas al inicio y nada más».
+- Un `git diff` de `settings.json` dice algo.
+- Una opción nueva del upstream **no queda congelada** con su valor de hoy en todos los perfiles
+  guardados.
+
+Por lo mismo, aplicar un perfil **borra** del `settings.json` las opciones que quedan en su valor por
+omisión, en lugar de escribirlas. Sin eso, aplicar dejaría 55 líneas en el archivo, la mayoría
+repitiendo lo que ya dice el upstream.
+
+Y al cargar un perfil, lo que el perfil no menciona vuelve **a fábrica**, no a lo que hubiera antes
+en el panel. Si no, aplicar dos perfiles seguidos daría un híbrido de los dos.
+
+### 25.5. La vista previa, y por qué tiene su propio proceso
+
+La vista previa es lado a lado: el mismo SQL de muestra formateado con lo que está aplicado y con lo
+que hay en el panel **sin aplicar**. Con 55 opciones, muchas oscuras (`asKeywordOnOwnLine`,
+`clauseBodyAlignment`), ver el efecto es la diferencia entre un panel útil y una lista de 55
+casillas.
+
+Pero por §25.1 las opciones son **del proceso**, no de la petición ni del documento. Con el STS que
+usa el editor no hay forma de formatear «como quedaría» sin cambiar de verdad cómo formatea todo lo
+demás; y previsualizar escribiendo los ajustes y restaurándolos es intrusivo, tiene carreras con el
+formateo al guardar, y si VS Code se cierra a media vista previa los deja cambiados.
+
+Así que la vista previa habla con **su propio STS**, efímero:
+
+- **No toca los ajustes ni la conexión del usuario.** De hecho no se conecta a ningún servidor:
+  medido, el STS formatea sin conexión, porque el formateo es puramente sintáctico.
+- Usa el binario que **ya va en el `.vsix`**, así que no entra ninguna dependencia y **no se toca el
+  descargador ni el arranque del STS del upstream** (§16 del brief).
+
+Coste medido: **785 ms** hasta que responde y **123 MB** residentes. No es gratis, así que arranca en
+la primera vista previa y muere con el panel. Por eso el comando de aplicar un perfil está separado
+del panel: cambiar de estilo a diario no debe costar un proceso.
+
+Comprobado además que la configuración **no se queda pegada** entre llamadas: volver a las opciones
+por omisión da exactamente el mismo texto que la primera vez.
+
+### 25.6. El hallazgo de la suite: dos copias de la extensión en el mismo host
+
+Al añadir M8, `test/unit/extension.test.ts` empezó a fallar con «View provider for
+'sqlworksSnippets' already registered», y ni hacer `registerCustom` reentrante (M7) ni un guardia a
+nivel de módulo lo arreglaban. El motivo, ya establecido:
+
+**Bajo los tests unitarios hay dos copias del código de la extensión vivas en el mismo host.**
+`package.json` apunta a `./dist/extension` —el bundle, que VS Code activa— y el test importa
+`src/extension`, que se ejecuta desde `out/`. Son dos módulos distintos, con su propio estado, así
+que ningún guardia a nivel de módulo puede coordinarlos.
+
+En producción solo hay una copia. La solución es tolerar ese fallo concreto: si el id ya está
+registrado, hay un proveedor para la vista y la vista funciona; lo que no puede es reventar el
+registro de todo lo demás.
+
+### 25.7. Desviaciones respecto a lo que §11.5 daba por entregado
+
+| Lo que decía §11.5                                   | Lo que hace M8                                                         |
+| ---------------------------------------------------- | ---------------------------------------------------------------------- |
+| Perfil XML                                           | **No se hace** (§25.2). Perfiles en `sqlworks.format.profiles`         |
+| Perfiles múltiples con selector                      | ✅ En el panel y en un selector rápido desde la paleta                 |
+| Panel de opciones con vista previa lado a lado       | ✅ Con su propio STS, sin tocar los ajustes (§25.5)                    |
+| Importación desde los ajustes actuales               | ✅ El panel arranca con lo aplicado; guardarlo como perfil es un botón |
+| Un test por opción                                   | **No se hace**: ver abajo                                              |
+| Opciones no soportadas deshabilitadas con su mensaje | **No aplica**: ver abajo                                               |
+
+- **«Un test por opción»** tenía sentido cuando el fork iba a _implementar_ el formateo. No lo
+  implementa: lo implementa ScriptDom dentro del STS, y probar sus 55 opciones sería probar código
+  de Microsoft. Lo que sí se prueba es lo nuestro: que el esquema se lee, que los perfiles se
+  mezclan y se guardan bien, y que la vista previa aplica opciones de verdad contra el STS real.
+- **«Opciones no soportadas deshabilitadas»** venía de que el panel iba a estar guiado por la lista
+  del XML, donde ~10 % de las opciones no tenían equivalente (§8.2). Guiado por el `package.json`,
+  solo existen las que existen: mostrar siete controles permanentemente deshabilitados para
+  funciones que el upstream no tiene sería ruido. Las que faltan siguen anotadas en §8.2, que es el
+  sitio donde alguien las buscaría.
+
+### 25.8. Verificación
+
+| Qué                             | Estado                               |
+| ------------------------------- | ------------------------------------ |
+| Unitarios propios de M8         | ✅ 26 nuevos (`formatSchema`)        |
+| Suite completa del repositorio  | ✅ 5186 + 205, 0 fallos              |
+| Vista previa contra el STS real | ✅ arnés directo, 5/5                |
+| Interfaz                        | ✅ los 3 e2e del fork siguen pasando |
+
+Uno de los unitarios comprueba el esquema **contra el `package.json` de verdad**: 55 opciones, todas
+pintables, todas con descripción. Es el test que avisa de que el upstream tocó el formateador.
+
+El arnés de vista previa ejecuta `PreviewFormatter` del fork contra el STS real y comprueba que
+respeta `keywordCasing` y `commaPlacement`, que volver a las opciones por omisión no arrastra la
+configuración anterior, y que un SQL inválido devuelve un motivo en lugar de lanzar.
+
+### 25.9. Lo que M8 deliberadamente no hace
+
+- **No sustituye el proveedor de formato** ni intercepta la capacidad del LSP.
+- **No define un formato de perfil propio** (§25.2).
+- **No escribe los ajustes sin que se lo pidan**: nada sale del panel hasta pulsar «Aplicar», y se
+  pregunta si va a los ajustes del usuario o a los del proyecto.
+- **No añade las ~10 % de opciones del brief que el upstream no tiene** (§8.2): eso sería escribir un
+  formateador.

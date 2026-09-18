@@ -199,4 +199,64 @@ export const Strings = {
         completionDetail: (name: string, library: string) =>
             library ? `${name} · SQLWorks (${library})` : `${name} · SQLWorks`,
     },
+
+    /** Panel de perfiles de formato (M8). */
+    format: {
+        panelTitle: "Formato de T-SQL",
+        /** Selector rápido de perfil. */
+        noSchema: "No se pudieron leer las opciones del formateador del paquete de la extensión.",
+        noProfiles:
+            "No tienes ningún perfil de formato guardado. Créalo en el panel de formato, donde puedes ver el efecto de cada opción antes de guardarlo.",
+        openPanelAction: "Abrir el panel de formato",
+        pickProfileTitle: "Aplicar un perfil de formato",
+        pickScopeTitle: "¿Dónde se guarda?",
+        profileDeviationCount: (count: number) =>
+            count === 1
+                ? "1 opción distinta de la de fábrica"
+                : `${count} opciones distintas de las de fábrica`,
+        profileApplied: (name: string) => `Perfil «${name}» aplicado.`,
+        scopeUserLabel: "Mis ajustes",
+        scopeUserDetail: "Vale en todos los proyectos. No se comparte.",
+        scopeWorkspaceLabel: "Ajustes de este proyecto",
+        scopeWorkspaceDetail:
+            "Se escribe en .vscode/settings.json. Al commitearlo, todo el equipo formatea igual.",
+        /** Lectura del ajuste de perfiles. Nada de esto deja el panel inservible. */
+        profilesNotAnObject:
+            "El ajuste sqlworks.format.profiles no tiene la forma esperada: debe ser un objeto con un perfil por clave.",
+        profileNotAnObject: (name: string) =>
+            `El perfil «${name}» se ignoró: su valor debe ser un objeto de opciones.`,
+        profileIgnoredOptions: (name: string, options: string) =>
+            `En el perfil «${name}» se ignoraron opciones que el formateador no reconoce o con un valor del tipo equivocado: ${options}`,
+        saveProfilesFailed: "No se pudieron guardar los perfiles.",
+        applyFailed: "No se pudieron escribir los ajustes del formateador.",
+        /** Resultados. */
+        applied: (count: number, scope: string) =>
+            count === 0
+                ? `Se dejaron los valores por omisión del formateador en ${scope}.`
+                : count === 1
+                  ? `1 opción aplicada en ${scope}.`
+                  : `${count} opciones aplicadas en ${scope}.`,
+        scopeUser: "los ajustes de usuario",
+        scopeWorkspace: "los ajustes del espacio de trabajo",
+        profileSaved: (name: string) => `Perfil «${name}» guardado.`,
+        profileDeleted: (name: string) => `Perfil «${name}» borrado.`,
+        profileNameRequired: "El perfil necesita un nombre.",
+        confirmDeleteProfile: (name: string) => `¿Borrar el perfil «${name}»?`,
+        deleteAction: "Borrar",
+        /** Vista previa. */
+        previewUnavailable: "No se pudo arrancar el formateador de la vista previa.",
+        previewNoBinary:
+            "No se encontró el SQL Tools Service del paquete, así que no hay vista previa.",
+        previewFailed:
+            "El formateador rechazó la vista previa. Comprueba que el SQL de muestra es válido.",
+        previewTimeout: "La vista previa tardó demasiado y se canceló.",
+        /** SQL de muestra por omisión: corto, pero toca lo que la mayoría de opciones cambian. */
+        defaultSample: [
+            "select c.nombre, sum(p.total) as total_gastado, count(*) as pedidos",
+            "from ventas.Cliente c inner join ventas.Pedido p on p.cliente_id = c.id",
+            "where c.activo = 1 and p.fecha >= '2026-01-01'",
+            "group by c.nombre having sum(p.total) > 1000",
+            "order by total_gastado desc;",
+        ].join("\n"),
+    },
 } as const;

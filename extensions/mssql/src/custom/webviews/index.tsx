@@ -11,6 +11,8 @@ import { AdminPanelStateProvider } from "./AdminPanel/adminPanelStateProvider";
 import { AdminPanelPage } from "./AdminPanel/adminPanelPage";
 import { SnippetsStateProvider } from "./Snippets/snippetsStateProvider";
 import { SnippetsPage } from "./Snippets/snippetsPage";
+import { FormatStateProvider } from "./Format/formatStateProvider";
+import { FormatPage } from "./Format/formatPage";
 import "../../webviews/index.css";
 
 /**
@@ -34,6 +36,12 @@ const CustomWebviewRouter = () => {
                 <AdminPanelStateProvider>
                     <AdminPanelPage />
                 </AdminPanelStateProvider>
+            );
+        case CustomWebviewKind.FormatProfiles:
+            return (
+                <FormatStateProvider>
+                    <FormatPage />
+                </FormatStateProvider>
             );
         case CustomWebviewKind.Snippets:
             return (

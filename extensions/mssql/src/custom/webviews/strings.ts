@@ -497,4 +497,34 @@ export const WebviewStrings = {
             save: "Guardar",
         },
     },
+
+    /** Panel de formato (M8). */
+    format: {
+        profileLabel: "Perfil",
+        noProfileSelected: "Sin perfil",
+        noProfilesYet: "Todavía no hay perfiles guardados",
+        newProfilePlaceholder: "Nombre del perfil nuevo",
+        saveProfile: "Guardar como perfil",
+        deleteProfile: "Borrar perfil",
+        /** Estado del borrador. */
+        unapplied: "Sin aplicar",
+        applyToUser: "Aplicar a mis ajustes",
+        applyToWorkspace: "Aplicar a este proyecto",
+        applyToWorkspaceHint:
+            "Escribe en .vscode/settings.json. Al commitearlo, todo el equipo formatea igual.",
+        revert: "Descartar cambios",
+        resetToDefaults: "Volver a los valores de fábrica",
+        searchPlaceholder: "Buscar una opción…",
+        onlyChanged: (count: number) =>
+            count === 1
+                ? "Solo la que difiere de fábrica (1)"
+                : `Solo las que difieren de fábrica (${count})`,
+        /** Vista previa. */
+        sampleLabel: "SQL de muestra",
+        previewLabel: "Vista previa",
+        previewing: "Vista previa (calculando…)",
+        previewApplied: "Con lo aplicado ahora",
+        previewCandidate: "Como quedaría (sin aplicar)",
+        previewSame: "Igual: no hay cambios sin aplicar",
+    },
 } as const;

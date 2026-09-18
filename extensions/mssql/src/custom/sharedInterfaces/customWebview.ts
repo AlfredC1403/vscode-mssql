@@ -14,6 +14,8 @@ export enum CustomWebviewKind {
     AdminPanel = "adminPanel",
     /** Biblioteca de snippets, en la barra lateral. Es una vista, no un panel del editor. */
     Snippets = "snippets",
+    /** Perfiles y opciones del formateador, con vista previa. */
+    FormatProfiles = "formatProfiles",
 }
 
 /** Campo que todo estado de una vista del fork tiene que llevar, para que el router decida. */

@@ -1184,6 +1184,18 @@
                 "icon": "$(symbol-snippet)"
             },
             {
+                "command": "sqlworks.openFormatPanel",
+                "title": "Formato de T-SQL: abrir el panel",
+                "category": "SQLWorks",
+                "icon": "$(symbol-ruler)"
+            },
+            {
+                "command": "sqlworks.applyFormatProfile",
+                "title": "Formato de T-SQL: aplicar un perfil",
+                "category": "SQLWorks",
+                "icon": "$(symbol-ruler)"
+            },
+            {
                 "command": "mssql.runQuery",
                 "title": "%mssql.runQuery%",
                 "category": "MS SQL",
@@ -1907,6 +1919,15 @@
             "type": "object",
             "title": "%mssql.Configuration%",
             "properties": {
+                "sqlworks.format.profiles": {
+                    "type": "object",
+                    "scope": "resource",
+                    "description": "Perfiles de formato de T-SQL con nombre. Cada clave es el nombre del perfil y su valor un objeto con las opciones que se desvían de las de fábrica, usando los nombres cortos de mssql.format.options.* (por ejemplo { \"Compacto\": { \"commaPlacement\": \"leading\", \"keywordCasing\": \"uppercase\" } }). Aplicar un perfil escribe esas opciones en mssql.format.options.*: el fork no sustituye el formateador, lo configura.",
+                    "default": {},
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
                 "sqlworks.snippets.sharedLibraries": {
                     "type": "array",
                     "scope": "resource",
