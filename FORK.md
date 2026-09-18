@@ -59,6 +59,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/package.json` | **M7**: la vista `sqlworksSnippets` (`type: "webview"`) dentro del contenedor `objectExplorer` que ya existe, el comando `sqlworks.showSnippets` y el ajuste `sqlworks.snippets.sharedLibraries` | Punto 12 del brief. Una vista y un comando solo existen si están declarados aquí. Va en el contenedor del upstream en lugar de crear otro, que sería una segunda barra para lo mismo. Es el **único** archivo del upstream que M7 toca | M7 |
 | `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 55 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
 | `extensions/mssql/package.json` | **M9, 1 línea**: `"visibility": "collapsed"` en nuestra vista `sqlworksSnippets` | Visible por omisión materializaba un segundo `iframe.webview` y rompía dos e2e del upstream, y con ellos los puntos 1 y 7 de la lista de paridad (§26.4). Se arregla en **nuestra** contribución, no en el arnés del upstream | M9 |
+| `extensions/mssql/package.json` | **§29**: `editor.quickSuggestions` dentro del `[sql]` de `contributes.configurationDefaults`, que ya existía | VS Code trae `other` en `offWhenInlineCompletions` y con Copilot delante la lista no se abría sola: solo con Ctrl+Espacio (§29.2). Es un valor de fábrica, por debajo de los ajustes del usuario. **Ninguna línea del upstream sustituida** | §29 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -126,6 +127,7 @@ el upstream pone sus funciones puras compartidas.
 | `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
 | `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
 | `extensions/mssql/test/harness/stsCompletionProbe.mjs`        | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
+| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`  | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
 | `FORK.md`                                                     | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
@@ -3212,3 +3214,98 @@ contra esa base y no tiene nada que ver con mayúsculas.
   pulsación. Un cambio que no se puede justificar con una medida no se queda.
 - **No toca el `sortText`** todavía. Es la hipótesis viva del §28.5, pero antes de escribirla hay que
   saber si la tabla aparece o no aparece.
+
+---
+
+## 29. Las sugerencias no se abrían solas: `offWhenInlineCompletions`
+
+El §28 dejó el problema acotado y abierto: ni el servidor escondía la tabla ni el filtro del editor la
+descartaba. Las capturas del usuario cerraron la parte que faltaba, y el problema **era otro**.
+
+### 29.1. Lo que se veía de verdad
+
+Escribiendo `SELECT * FROM navigation` la lista **sí** aparece, y `DSHB_NavigationNodes`,
+`DSHB_NavigationNodes_Favorites` y `DSHB_NavigationNodes_Layout` salen con la parte coincidente en
+negrita. O sea que el filtro encaja las minúsculas y encaja por el medio del nombre, exactamente como
+midió el §28.4.
+
+Lo que no pasaba es que la lista **se abriera sola**. Solo salía pulsando Ctrl+Espacio. El síntoma
+«no me sale si escribo en minúsculas» era en realidad «no me sale sin pulsar nada», y la parte de las
+mayúsculas era una casualidad de cómo se probó.
+
+### 29.2. La causa
+
+`editor.quickSuggestions.other` viene de fábrica en **`offWhenInlineCompletions`**: mientras haya una
+sugerencia en línea visible, VS Code no abre el widget solo. Con Copilot instalado, en un editor de
+SQL hay texto fantasma casi todo el rato. Ctrl+Espacio es un disparo explícito y se salta la regla,
+de ahí que fuera lo único que funcionaba.
+
+Medido dentro del VS Code real, escribiendo con el comando `type` —el mismo camino que el teclado— y
+contando cuántas veces se pide autocompletado:
+
+| Escenario                                                    | Peticiones |
+| ------------------------------------------------------------ | ---------- |
+| SQL, escribiendo `nav`                                       | 3          |
+| SQL, escribiendo `nav`, **con sugerencias en línea activas** | **0**      |
+| Lo mismo, con `quickSuggestions.other` en `on`               | 3          |
+
+El cero del medio es el fallo. La tercera fila es el arreglo, verificado en la misma pasada.
+
+### 29.3. El arreglo
+
+Una entrada en `contributes.configurationDefaults` del `package.json`, junto al
+`editor.wordSeparators` que el upstream ya pone para `[sql]`:
+
+```json
+"[sql]": {
+    "editor.wordSeparators": "...",
+    "editor.quickSuggestions": { "other": "on", "comments": "off", "strings": "off" }
+}
+```
+
+Tres cosas de por qué así:
+
+- **Es un valor de fábrica, no un ajuste impuesto.** `configurationDefaults` va **por debajo** de los
+  ajustes del usuario: quien prefiera el comportamiento de VS Code solo tiene que escribirlo en su
+  `settings.json` y gana el suyo.
+- **Solo para `[sql]`.** No se toca el comportamiento en ningún otro lenguaje.
+- **`comments` y `strings` se quedan en `off`**, que es lo de VS Code. Proponer nombres de tabla
+  dentro de un comentario o de un literal es ruido, y el §24.6 ya tomó esa misma decisión para los
+  snippets del fork por su cuenta.
+
+Para un editor de SQL la elección es clara: el texto fantasma de Copilot es una conjetura, y la lista
+de objetos es el catálogo real de la base a la que estás conectado.
+
+### 29.4. Lo que sigue necesitando Ctrl+Espacio, y por qué se deja así
+
+Con el hueco vacío —`SELECT * FROM ` y nada escrito— la lista no se abre sola, y **es correcto**: sin
+palabra que completar VS Code no dispara, y el STS no declara el espacio como carácter de disparo
+(los suyos son `.`, `:`, `\`, `[` y `"`, leídos de sus capacidades). Se podría forzar registrando un
+proveedor propio con el espacio entre sus caracteres de disparo, pero eso abriría el widget después
+de **cada** espacio del archivo. Es peor que el gesto que ya existe, así que se documenta en lugar de
+forzarlo: en el hueco, Ctrl+Espacio; en cuanto escribes una letra, sale sola.
+
+### 29.5. Verificación
+
+| Qué                                           | Estado                       |
+| --------------------------------------------- | ---------------------------- |
+| Unitarios nuevos (`quickSuggestions.test.ts`) | ✅ 4, contra el VS Code real |
+| Suite completa                                | ✅ sin regresiones           |
+| `lint` y typecheck                            | ✅                           |
+
+Los cuatro no miran el ajuste, miran la consecuencia: que al escribir se pida autocompletado, que se
+siga pidiendo con un proveedor de sugerencias en línea delante —el test que sin el arreglo da cero—,
+que el valor de fábrica llegue al editor, y que en el hueco vacío siga sin dispararse, que es lo
+correcto y conviene que nadie lo «arregle» sin querer.
+
+Coste en deuda de merge: **ninguna línea del upstream sustituida**. Una clave nueva dentro de un
+objeto que ya existía.
+
+### 29.6. Lo que esto deliberadamente no hace
+
+- **No toca `editor.inlineSuggest`** ni nada de Copilot. Las dos cosas conviven: el arreglo es que la
+  lista pueda abrirse, no que la otra se calle.
+- **No fuerza el disparo por espacio** (§29.4).
+- **No cambia el orden de las sugerencias.** La hipótesis del `sortText` del §28.5 sigue sin
+  escribirse, y ahora además sin motivo: si la lista se abre sola y el filtro encaja, el orden que
+  hay ya sirve. Si algún día molesta, ahí está anotada.
