@@ -9,6 +9,8 @@ import { useVscodeSelector } from "../../webviews/common/useVscodeSelector";
 import { CustomWebviewKind, CustomWebviewStateBase } from "../sharedInterfaces/customWebview";
 import { AdminPanelStateProvider } from "./AdminPanel/adminPanelStateProvider";
 import { AdminPanelPage } from "./AdminPanel/adminPanelPage";
+import { SnippetsStateProvider } from "./Snippets/snippetsStateProvider";
+import { SnippetsPage } from "./Snippets/snippetsPage";
 import "../../webviews/index.css";
 
 /**
@@ -32,6 +34,12 @@ const CustomWebviewRouter = () => {
                 <AdminPanelStateProvider>
                     <AdminPanelPage />
                 </AdminPanelStateProvider>
+            );
+        case CustomWebviewKind.Snippets:
+            return (
+                <SnippetsStateProvider>
+                    <SnippetsPage />
+                </SnippetsStateProvider>
             );
         default:
             return undefined;

@@ -12,6 +12,8 @@
 export enum CustomWebviewKind {
     /** Panel de administración: servidor, bases de datos y usuarios. */
     AdminPanel = "adminPanel",
+    /** Biblioteca de snippets, en la barra lateral. Es una vista, no un panel del editor. */
+    Snippets = "snippets",
 }
 
 /** Campo que todo estado de una vista del fork tiene que llevar, para que el router decida. */

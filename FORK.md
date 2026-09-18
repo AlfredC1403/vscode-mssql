@@ -51,6 +51,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/tsconfig.webviews.json` | **2 líneas**: incluye `src/custom/webviews` y `src/custom/sharedInterfaces` | Ídem | M2 |
 | `extensions/mssql/tsconfig.webviews.json` | **M3, 1 línea**: incluye además `src/custom/admin/sql/types.ts` | Los tipos del dominio los fija el §9 del brief en esa ruta y el panel los pinta tal cual. No importan nada, así que compilan en los dos lados sin duplicarlos | M3 |
 | `extensions/mssql/package.json` | **M5**: el ajuste `sqlworks.productionServers` en `contributes.configuration.properties`, con `scope: "application"` | Regla 11.4 del brief. Un ajuste solo existe si está declarado aquí; el `scope` impide que el `settings.json` de un repositorio desmarque un servidor de producción (§22.7). Es el **único** archivo del upstream que M5 toca | M5 |
+| `extensions/mssql/package.json` | **M7**: la vista `sqlworksSnippets` (`type: "webview"`) dentro del contenedor `objectExplorer` que ya existe, el comando `sqlworks.showSnippets` y el ajuste `sqlworks.snippets.sharedLibraries` | Punto 12 del brief. Una vista y un comando solo existen si están declarados aquí. Va en el contenedor del upstream en lugar de crear otro, que sería una segunda barra para lo mismo. Es el **único** archivo del upstream que M7 toca | M7 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -2187,3 +2188,149 @@ aplicar es de tipo `password` de verdad.
   aplica complejidad (medido: aceptó `clave_secreta_123` con `CHECK_POLICY = ON`), así que cualquier
   validación propia sería una suposición sobre la política del servidor de destino. Si el motor la
   rechaza, la transacción se revierte y el panel muestra su mensaje.
+
+---
+
+## 24. Biblioteca de snippets (M7)
+
+El punto 12 del brief pide una vista de snippets implementada como `WebviewViewProvider` y **no**
+como `TreeDataProvider`. No hizo falta infraestructura: `WebviewViewController` del upstream ya
+implementa esa interfaz (§3.1), así que la vista es una clase más del fork y entra por el router del
+bundle único (§16.2), sin tocar `bundle-webviews.js`.
+
+### 24.1. Lo que el upstream ya tenía, y el hueco que queda
+
+El upstream ofrece snippets en el editor por **dos** caminos, y los dos son estáticos:
+
+| Camino                                                | Cuántos | Editable por el usuario |
+| ----------------------------------------------------- | ------- | ----------------------- |
+| `contributes.snippets` → `snippets/mssql.json`        | 18      | No, va en el `.vsix`    |
+| `TSQL_SNIPPETS` en `src/sqlLanguage/data/snippets.ts` | 23      | No, compilado           |
+
+El hueco es justo ese: **ninguno crece con lo que escriba la persona**. M7 añade una biblioteca
+propia, editable, y —porque es un fork de distribución interna— bibliotecas **compartidas** para un
+equipo.
+
+Los 18 de la extensión se leen también y se muestran en la vista, en solo lectura. Es una decisión
+de usabilidad: sin eso habría que recordar cuáles salen en la autocompletación y cuáles están en la
+lista, y la vista deja de ser «el sitio donde buscar un snippet».
+
+### 24.2. Dónde vive cada cosa
+
+| Origen          | Dónde                                                | Se puede editar |
+| --------------- | ---------------------------------------------------- | --------------- |
+| Propia          | `globalStorageUri/snippets.json`                     | Sí              |
+| Compartidas     | Rutas del ajuste `sqlworks.snippets.sharedLibraries` | No              |
+| De la extensión | `snippets/mssql.json` del `.vsix`                    | No              |
+
+La propia es **global y no del espacio de trabajo**: es la biblioteca de la persona, y por proyecto
+habría que reescribirla en cada repositorio. No va en `settings.json` porque un cuerpo de T-SQL de
+veinte líneas dentro de un ajuste es incómodo de editar y ensucia un archivo que se comparte.
+
+Las compartidas son de **solo lectura desde el panel**, a propósito: editar desde aquí el archivo
+que usa un equipo entero sería una sorpresa desagradable. Quien las mantenga lo hace con su editor y
+su control de versiones. Lo que sí se puede es **duplicar** uno de solo lectura a la biblioteca
+propia, que es la forma de partir de algo ajeno sin pisarlo.
+
+**Se aceptan dos formatos**, y no por generosidad: el propio (un array de objetos) y el de los
+archivos de snippets de VS Code (un objeto con el nombre como clave). El segundo ya existe, así que
+un equipo que tenga snippets de SQL en ese formato puede apuntar a ellos sin convertir nada — y los
+18 de la extensión se leen con el mismo código en lugar de con un caso especial. El cuerpo se acepta
+como cadena o como array de líneas, porque hay archivos reales con las dos formas.
+
+### 24.3. Nada de esto puede dejar la vista inservible
+
+Una biblioteca compartida vive en una ruta de red y la edita gente a mano. Así que `parseLibrary`
+**no lanza**: devuelve lo que se pudo leer, el motivo de lo que no, y las entradas sueltas que se
+descartaron. La vista muestra las tres cosas a la vez. Una ruta caída da su aviso y el resto de los
+snippets siguen ahí.
+
+Dos detalles que no son evidentes:
+
+- **El motivo de un JSON roto no incluye el mensaje de `JSON.parse`.** Dice la posición, que no
+  ayuda a nadie, y puede arrastrar un trozo del contenido del archivo a la interfaz. Hay un test que
+  lo fija con un centinela.
+- **Una biblioteca propia con el JSON roto no se sobrescribe.** El aviso dice que se abra y se
+  arregle. Reescribirla con lo que se pudo leer perdería el trabajo de la persona.
+
+### 24.4. El bug que encontró el e2e
+
+Insertar desde la barra lateral obliga a **quitar el foco del editor**, así que el diseño no se fía
+de `vscode.window.activeTextEditor` —que es «el activo o, si ninguno tiene el foco, el que cambió
+más recientemente»— y `SnippetInserter` se acuerda del último editor de SQL.
+
+La primera versión tenía un fallo que el e2e destapó: el aviso de «no hay ningún editor de SQL» se
+quedaba puesto con un `.sql` abierto delante. El motivo es sutil y merece quedar escrito:
+
+```ts
+// MAL: `target` lee activeTextEditor en vivo, y cuando llega el evento ya refleja el cambio,
+// así que `had` y el valor nuevo son siempre iguales y el evento no se dispara nunca.
+const had = this.target !== undefined;
+this.remember(editor);
+if (had !== (this.target !== undefined)) {
+    this.emitter.fire();
+}
+```
+
+La corrección es guardar la última disponibilidad publicada en un campo y comparar contra eso. Hay
+un test unitario que lo fija —«**avisa** cuando aparece un editor de SQL»— para que la próxima vez se
+detecte en un segundo y no en una ejecución de Playwright.
+
+### 24.5. Dos cosas que la suite obligó a arreglar
+
+Ninguna es de snippets, y las dos son mejoras de verdad:
+
+1. **La primera lectura es diferida.** Leer el disco en la activación rompía
+   `test/unit/extension.test.ts`: `stubExtensionContext` del upstream no define `globalStorageUri`,
+   y `Uri.joinPath(undefined, …)` lanzaba. Se movió a `resolveWebviewView`, que es cuando la vista
+   se abre de verdad. Aparte del test, es lo correcto: la extensión no debe pagar E/S en el arranque
+   por una vista que quizá nadie mire en toda la sesión.
+2. **`registerCustom` es reentrante.** Un identificador de vista solo se puede registrar una vez por
+   host de extensión, y `registerWebviewViewProvider` lanza «already registered» al segundo intento.
+   Ese mismo test activa la extensión en cada caso, con un `subscriptions` nuevo que nadie libera.
+   Ahora `registerCustom` suelta lo que registró la llamada anterior. Hasta M7 el fork solo
+   registraba comandos y eso no se quejaba.
+
+### 24.6. Los snippets propios en la autocompletación
+
+Los propios y los compartidos se ofrecen también al escribir en un `.sql`, con un
+`CompletionItemProvider`. Es **aditivo**: VS Code combina todos los proveedores registrados, así que
+los dos caminos del upstream siguen funcionando igual y este añade los de la persona. No entra un
+segundo motor de lenguaje ni se toca el del upstream, que es lo que prohíbe el §16 del brief.
+
+Los de la extensión **se excluyen** de la autocompletación a propósito: ya los ofrece VS Code por
+`contributes.snippets`, y volver a ofrecerlos daría dos entradas idénticas por snippet.
+
+Dentro de una cadena o de un comentario no se sugiere nada. Se mira el texto de la línea hasta el
+cursor: sin analizador de SQL, que el §16 prohíbe y que aquí no hace falta. Las comillas dobladas
+(`''`) cuentan como escapada y no como dos delimitadores, igual que en T-SQL. El coste de
+equivocarse es una sugerencia de más o de menos, nunca un error.
+
+Un detalle que sí importa: **el prefijo no se valida con las reglas del 11.2.** Esas son para
+identificadores que acaban dentro de una consulta; un prefijo es una palabra que dispara una
+sugerencia en el editor. Lo que sí se exige es que no lleve espacios, porque VS Code filtra por la
+palabra anterior al cursor y un prefijo con espacios nunca coincidiría.
+
+### 24.7. Verificación
+
+| Qué                            | Estado                                                                       |
+| ------------------------------ | ---------------------------------------------------------------------------- |
+| Unitarios propios de M7        | ✅ 38 nuevos (`snippetLibrary` 23, `snippetInsert` 8, `snippetCompletion` 7) |
+| Suite completa del repositorio | ✅ 5160 + 205, 0 fallos                                                      |
+| Interfaz                       | ✅ `test/e2e/sqlworksSnippets.spec.ts`                                       |
+
+El e2e de snippets **no necesita servidor** —la vista no consulta nada—, así que va en su propio
+archivo en lugar de en el del panel de administración, que sí exige una instancia alcanzable. Lo que
+comprueba: que los de la extensión salen en solo lectura, que el aviso de «no hay editor de SQL» se
+ve cuando no lo hay, que un prefijo con espacios se rechaza en el formulario, que un snippet propio
+se crea y aparece **delante** de los de la extensión, que insertar desde la barra lateral **llega al
+editor**, y que borrar pide confirmación y cancelar no borra.
+
+### 24.8. Lo que M7 deliberadamente no hace
+
+- **No sustituye ni toca los dos caminos de snippets del upstream** (§24.1).
+- **No escribe en las bibliotecas compartidas** (§24.2).
+- **No sincroniza nada.** La biblioteca propia es un archivo JSON; compartirla es ponerla en una ruta
+  común y añadirla al ajuste, no un servicio.
+- **No valida el T-SQL del cuerpo.** Un snippet es una plantilla con huecos y no tiene por qué ser
+  una sentencia válida por sí sola; comprobarlo exigiría un analizador, que el §16 prohíbe.

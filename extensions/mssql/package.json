@@ -249,6 +249,12 @@
                     "id": "backgroundTasks",
                     "name": "%extension.backgroundTasks%",
                     "icon": "media/objectTypes/Queue.svg"
+                },
+                {
+                    "id": "sqlworksSnippets",
+                    "name": "Snippets",
+                    "type": "webview",
+                    "icon": "media/objectTypes/StoredProcedure.svg"
                 }
             ]
         },
@@ -1172,6 +1178,12 @@
                 "icon": "$(shield)"
             },
             {
+                "command": "sqlworks.showSnippets",
+                "title": "Mostrar la biblioteca de snippets",
+                "category": "SQLWorks",
+                "icon": "$(symbol-snippet)"
+            },
+            {
                 "command": "mssql.runQuery",
                 "title": "%mssql.runQuery%",
                 "category": "MS SQL",
@@ -1895,6 +1907,15 @@
             "type": "object",
             "title": "%mssql.Configuration%",
             "properties": {
+                "sqlworks.snippets.sharedLibraries": {
+                    "type": "array",
+                    "scope": "resource",
+                    "description": "Rutas de bibliotecas de snippets compartidas, para un equipo. Se leen en solo lectura: el panel no las modifica. Se acepta el formato propio de SQLWorks (un array) y el de los archivos de snippets de VS Code (un objeto con el nombre como clave).",
+                    "default": [],
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "sqlworks.productionServers": {
                     "type": "object",
                     "scope": "application",

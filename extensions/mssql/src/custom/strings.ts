@@ -170,4 +170,33 @@ export const Strings = {
         scriptDocumentHeader: (server: string, database: string) =>
             `-- SQLWorks · vista previa del cambio\n-- Servidor: ${server}\n-- Base de datos: ${database}\n-- Este editor NO está conectado: es una copia para revisar, no para ejecutar.\n`,
     },
+
+    /** Biblioteca de snippets (M7). Mensajes del host. */
+    snippets: {
+        notFound: "Ese snippet ya no está en la biblioteca. Vuelve a cargar la vista.",
+        loadFailed: "No se pudo leer la biblioteca de snippets.",
+        readOnly:
+            "Ese snippet es de solo lectura: viene de la extensión o de una biblioteca compartida. Duplícalo en tu biblioteca para poder cambiarlo.",
+        noEditor:
+            "No hay ningún editor de SQL abierto donde insertarlo. Abre un archivo .sql, o copia el snippet al portapapeles.",
+        insertRejected: "El editor no aceptó la inserción.",
+        copied: (name: string) => `«${name}» copiado al portapapeles.`,
+        copyName: (name: string) => `${name} (copia)`,
+        confirmDelete: (name: string) => `¿Borrar el snippet «${name}»?`,
+        deleteAction: "Borrar",
+        saveFailed: "No se pudo guardar la biblioteca de snippets.",
+        saveFailedWith: (reason: string) =>
+            `No se pudo guardar la biblioteca de snippets: ${reason}`,
+        /** Avisos de lectura. Ninguno deja la vista inservible. */
+        ownLibraryBroken: (reason: string) =>
+            `Tu biblioteca de snippets no se pudo leer (${reason}) No se ha sobrescrito: ábrela y arregla el JSON para no perder lo que tengas.`,
+        ownSkipped: (reason: string) => `Se descartó una entrada de tu biblioteca. ${reason}`,
+        sharedUnreadable: (library: string) =>
+            `La biblioteca compartida «${library}» no se pudo leer. Comprueba que la ruta existe y es accesible.`,
+        sharedBroken: (library: string, reason: string) =>
+            `La biblioteca compartida «${library}» no se pudo usar: ${reason}`,
+        /** Autocompletación. */
+        completionDetail: (name: string, library: string) =>
+            library ? `${name} · SQLWorks (${library})` : `${name} · SQLWorks`,
+    },
 } as const;

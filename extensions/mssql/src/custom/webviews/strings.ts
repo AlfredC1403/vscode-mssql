@@ -448,4 +448,53 @@ export const WebviewStrings = {
             `${total} permisos efectivos, ${inherited} heredados`,
         legend: "Resuelve la herencia por pertenencia a roles, incluida la de public. No resuelve la jerarquía de objetos: un DENY sobre una columna sale como fila aparte del GRANT sobre el esquema.",
     },
+
+    /** Biblioteca de snippets (M7). */
+    snippets: {
+        searchPlaceholder: "Buscar por nombre, prefijo o contenido…",
+        empty: "Tu biblioteca está vacía. Pulsa «+» para crear un snippet, o duplica uno de los que trae la extensión.",
+        newSnippet: "Crear un snippet",
+        openFile: "Abrir el archivo de la biblioteca",
+        insert: "Insertar",
+        insertAria: (name: string) => `Insertar «${name}» en el editor`,
+        copy: "Copiar al portapapeles",
+        copyAria: (name: string) => `Copiar «${name}» al portapapeles`,
+        edit: "Editar",
+        editAria: (name: string) => `Editar «${name}»`,
+        remove: "Borrar",
+        removeAria: (name: string) => `Borrar «${name}»`,
+        duplicate: "Duplicar en mi biblioteca",
+        duplicateAria: (name: string) => `Duplicar «${name}» en mi biblioteca`,
+        /** Se dice por qué el botón de insertar está desactivado, en lugar de dejarlo gris sin más. */
+        noEditorHint:
+            "No hay ningún editor de SQL abierto. Abre un archivo .sql para poder insertar; copiar al portapapeles funciona igual.",
+        libraryAt: (path: string) => `Tu biblioteca: ${path}`,
+        groups: {
+            own: "Mis snippets",
+            ownWithCategory: (category: string) => `Mis snippets · ${category}`,
+            shared: (library: string) => `Compartidos · ${library}`,
+            builtin: "De la extensión (solo lectura)",
+        },
+        editor: {
+            newTitle: "Nuevo snippet",
+            editTitle: "Editar el snippet",
+            nameLabel: "Nombre",
+            namePlaceholder: "Bloqueos actuales",
+            prefixLabel: "Prefijo",
+            prefixHint:
+                "Palabra que lo sugiere al escribir en un archivo .sql. Si se deja vacío, el snippet solo aparece en esta lista.",
+            prefixPlaceholder: "bloqueos",
+            prefixNoSpaces:
+                "El prefijo no puede llevar espacios: el editor filtra por la palabra anterior al cursor.",
+            bodyLabel: "Cuerpo",
+            bodyHint:
+                "Sintaxis de snippet de VS Code: $1 y $2 son los saltos del tabulador, ${1:valor} lleva un valor por omisión, y el mismo número repetido se edita a la vez.",
+            bodyPlaceholder: "SELECT ${1:columnas}\nFROM ${2:tabla}\nWHERE ${3:condicion};",
+            descriptionLabel: "Descripción",
+            categoryLabel: "Categoría",
+            categoryHint: "Para agrupar en la lista. Opcional.",
+            categoryPlaceholder: "Diagnóstico",
+            save: "Guardar",
+        },
+    },
 } as const;

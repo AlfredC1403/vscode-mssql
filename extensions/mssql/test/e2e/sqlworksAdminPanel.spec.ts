@@ -11,7 +11,7 @@ import { Page, expect } from "@playwright/test";
 
 import { test } from "./baseFixtures";
 import { useSharedVsCodeLifecycle } from "./utils/testLifecycle";
-import { getWebviewByTitle } from "./utils/testHelpers";
+import { findSqlworksWebview } from "./utils/sqlworksWebview";
 import { DEFAULT_USER_CONFIG } from "./utils/launchVscodeWithMsSqlExt";
 import { getPassword, getServerName, getUserName } from "./utils/envConfigReader";
 
@@ -101,8 +101,12 @@ async function openAdminPanel(page: Page) {
     await menuItem.hover();
     await page.keyboard.press("Enter");
 
-    // El título del panel lo pone AdminPanelController a partir del nombre del servidor.
-    const panel = await getWebviewByTitle(page, `Administración · ${getServerName()}`);
+    // No se usa `getWebviewByTitle`: busca `.webview` sin acotar, y desde M7 hay **dos** webviews
+    // abiertos —este panel y la vista de snippets de la barra lateral—, así que dejó de ser único.
+    // Se identifica por su contenido; el motivo largo está en `utils/sqlworksWebview.ts`.
+    const panel = await findSqlworksWebview(page, (frame) =>
+        frame.getByRole("heading", { name: "Administración" }),
+    );
     await expect(panel.getByRole("heading", { name: "Administración" })).toBeVisible({
         timeout: 60_000,
     });
