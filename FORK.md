@@ -66,6 +66,9 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/src/webviews/pages/QueryResult/queryResultFluentResultGrid.tsx` | **§31**: la contribución `sqlworks.showReferencedRow` al menú de celda, su caso, y el globo junto a la rejilla | La rejilla admite comandos de terceros por diseño; lo que hay que tocar es el consumidor que arma la configuración (§31.1) | §31 |
 | `extensions/mssql/src/webviews/common/FluentResultGrid/internal/fluentResultGridCommandController.ts` | **§31, 6 líneas y un helper**: el menú contextual de celda lleva ahora la celda en su contexto | Hasta aquí `cell` solo lo rellenaba el doble clic, así que un comando del menú **de celda** no sabía sobre qué celda se había pulsado (§31.4) | §31 |
 | `extensions/mssql/package.json` | **§30**: `mssql.query.showActiveConnectionAsCodeLensSuggestion` pasa a `default: false` | El CodeLens de la línea 0 se desplaza con el texto y deja de verse (§30.1). El ajuste sigue declarado: quien lo quiera lo enciende | §30 |
+| `extensions/mssql/src/webviews/pages/TableExplorer/TableExplorerToolbar.tsx` | **§32**: el botón «Save Changes» **sustituido** por el par confirmar/descartar, más el `import` y la propiedad `onDiscard` | Es justo lo que se pidió cambiar: un disquete gris entre nueve iconos grises, sin cuenta y sin la otra mitad (§32.1). Único sitio del upstream sustituido en §32 | §32 |
+| `extensions/mssql/src/webviews/pages/TableExplorer/TableDataGrid.tsx` | **§32, 2 añadidos**: `revertAllPendingRows()` en el ref de la rejilla y el `import` de `pendingRowIds` | La cuenta y el resaltado son de la rejilla, en refs propias: revertir desde fuera devolvía los valores y dejaba la barra diciendo «(2)» (§32.3). **Ninguna línea del upstream sustituida** | §32 |
+| `extensions/mssql/src/webviews/pages/TableExplorer/TableExplorerPage.tsx` | **§32, 5 líneas**: `handleDiscard`, que llama a la rejilla, y su paso a la barra | Es quien tiene el ref de la rejilla. **Ninguna línea del upstream sustituida** | §32 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -125,21 +128,24 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                                       | Para qué                                                                                                                                                                                                                                                     |
-| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`                          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`                 | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
-| `extensions/mssql/images/sqlworksIcon.png`                                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
-| `extensions/mssql/scripts/package-fork.js`                                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
-| `NOTICE.md`                                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
-| `extensions/mssql/test/harness/stsCompletionProbe.mjs`                        | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
-| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`                  | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
-| `extensions/mssql/src/custom/connection/connectionSelector.ts`                | El selector de servidor y base en la barra de estado (§30)                                                                                                                                                                                                   |
-| `extensions/mssql/src/custom/results/referencedRow.ts`                        | Resuelve la clave ajena de una celda y lee la fila a la que apunta (§31)                                                                                                                                                                                     |
-| `extensions/mssql/src/custom/results/foreignKeyLookup.ts`                     | Las tres consultas de §31, con sus reglas de entrecomillado                                                                                                                                                                                                  |
-| `extensions/mssql/src/custom/webviews/ReferencedRow/referencedRowPopover.tsx` | El globo que las enseña, anclado a la celda (§31.4)                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/referencedRow.test.ts`                     | Fija el texto que se manda al servidor: identificadores validados y valor parametrizado                                                                                                                                                                      |
-| `FORK.md`                                                                     | Este archivo                                                                                                                                                                                                                                                 |
+| Archivo                                                                        | Para qué                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`                           | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`                  | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                                     | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                                     | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                                    | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `extensions/mssql/test/harness/stsCompletionProbe.mjs`                         | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
+| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`                   | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
+| `extensions/mssql/src/custom/connection/connectionSelector.ts`                 | El selector de servidor y base en la barra de estado (§30)                                                                                                                                                                                                   |
+| `extensions/mssql/src/custom/results/referencedRow.ts`                         | Resuelve la clave ajena de una celda y lee la fila a la que apunta (§31)                                                                                                                                                                                     |
+| `extensions/mssql/src/custom/results/foreignKeyLookup.ts`                      | Las tres consultas de §31, con sus reglas de entrecomillado                                                                                                                                                                                                  |
+| `extensions/mssql/src/custom/webviews/ReferencedRow/referencedRowPopover.tsx`  | El globo que las enseña, anclado a la celda (§31.4)                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/referencedRow.test.ts`                      | Fija el texto que se manda al servidor: identificadores validados y valor parametrizado                                                                                                                                                                      |
+| `extensions/mssql/src/custom/webviews/TableExplorer/pendingChangesButtons.tsx` | El par confirmar (verde) / descartar (rojo) de la barra del editor de datos (§32.2)                                                                                                                                                                          |
+| `extensions/mssql/src/custom/webviews/TableExplorer/pendingChanges.ts`         | Qué filas hay que revertir para descartarlo todo, y en qué orden. Sin React, para que lo alcancen los unitarios (§32.3)                                                                                                                                      |
+| `extensions/mssql/test/unit/custom/pendingChanges.test.ts`                     | Fija ese conjunto y ese orden: es lo único de §32 que se puede equivocar en silencio                                                                                                                                                                         |
+| `FORK.md`                                                                      | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -3564,3 +3570,103 @@ añadidos marcados con `// [FORK]`.
 - **No toca la rejilla vieja** (§31.1).
 - **No cachea nada.** Cada apertura son tres consultas de catálogo, que contra el servidor de la
   conexión son inmediatas. Si algún día molesta, se cachea el resultado de §31.2 por documento.
+
+## 32. Confirmar en verde y descartar en rojo: el par del editor de datos
+
+Se pidió «el inline editor de dbForge: poder editar varias celdas a la vez, y luego con un botón de
+una flechita en verde confirmar los cambios, o con una equis en rojo rechazarlo».
+
+### 32.1. Qué había ya, medido
+
+**La edición de varias celdas ya estaba**, y funciona. Es el Table Explorer del upstream («Edit
+Table Data…» en el menú de una tabla): abre una sesión de edición contra el STS (`edit/initialize`),
+cada celda que se toca se manda como `edit/updateCell`, se queda marcada en la rejilla, y **nada
+llega a la tabla** hasta que se pulsa guardar, que es un `edit/commit`. Comprobado contra el
+servidor de §28.2: dos celdas editadas, la tabla sin tocar hasta el final.
+
+Lo que no estaba es la mitad de descartar. Había revertido —`edit/revertRow` y `edit/revertCell`,
+con su reducer y su llamada— pero solo se llegaba a él **fila por fila**: el botón de deshacer de la
+fila, o su menú contextual. Con quince celdas tocadas en cinco filas, dejarlo eran cinco viajes.
+
+Y el botón que sí había, «Save Changes», era un icono de disquete gris entre otros nueve iconos
+grises. No decía cuántos cambios había ni se distinguía de «Export» de un vistazo.
+
+### 32.2. Lo que hace el fork
+
+Dos botones al principio de la barra, con la cuenta de cambios pendientes en los dos:
+
+| Botón                | Qué hace                                               | Toca el servidor |
+| -------------------- | ------------------------------------------------------ | ---------------- |
+| ✅ **Confirmar (n)** | `edit/commit`: aplica todo lo montado                  | Sí               |
+| ❌ **Descartar (n)** | Revierte todo lo pendiente y deja la tabla como estaba | No               |
+
+Sin cambios pendientes los dos salen deshabilitados, pero **siguen ahí**: un botón que aparece y
+desaparece mueve el resto de la barra de sitio, y entonces se pulsa lo que no es.
+
+El verde y el rojo salen del tema (`--vscode-testing-iconPassed`, `--vscode-errorForeground`), no
+fijados a mano: hay temas claros, oscuros y de alto contraste, y un `#3fb950` a pelo se pierde en
+alguno.
+
+### 32.3. Por qué descartar vive en la rejilla y no en el botón
+
+La primera versión hacía lo obvio: leer del estado qué filas tenían algo pendiente y llamar al
+reducer `revertRow` de cada una. **Contra el servidor real se vio que no bastaba**, en dos pasos:
+
+1. Miraba `row.isDirty`, pero el reducer `updateCell` del upstream marca `isDirty` en la **celda**,
+   no en la fila. El botón no encontraba nada que descartar y se quedaba sin hacer nada. Compilaba
+   igual, porque `EditRow` declara las dos banderas.
+2. Arreglado eso, los valores **sí** volvían a su sitio… y la barra seguía diciendo «Descartar (2)»
+   con las dos celdas resaltadas. La cuenta y el resaltado no salen del estado: son de la rejilla,
+   que los lleva en refs propias (`cellChangesRef`, `deletedRowsRef`, `newRowIdsRef`). Un revertido
+   hecho desde fuera no las toca.
+
+La segunda versión recargaba el subconjunto después de revertir, para forzar el refresco. Funcionaba
+a medias y era un rodeo: reiniciaba la sesión de edición para arreglar un contador.
+
+Lo que hay ahora no da ese rodeo. La rejilla **ya tenía** un `revertRow(rowId)` interno —el del
+botón de deshacer de la fila— que hace las cuatro cosas en orden: llama al STS, limpia el
+seguimiento de esa fila, avisa de la nueva cuenta e invalida el pintado. Descartar es ese mismo
+camino, una vez por fila pendiente, expuesto en el ref de la rejilla como `revertAllPendingRows()`.
+Así la cuenta llega a cero **porque cada revertido la fue bajando**, no porque nadie la ponga a
+cero; y el resaltado se va por donde se va siempre.
+
+Qué filas entran y en qué orden lo decide `pendingRowIds()`, en el fork y aparte de React para que
+lo alcancen los unitarios. Tres orígenes —celdas editadas, filas marcadas para borrar, filas nuevas—
+y **orden descendente**, que no es cosmético: revertir una fila nueva la saca del conjunto, así que
+ir de abajo arriba deja quietos los identificadores de las que faltan.
+
+### 32.4. Por qué descartar no pregunta
+
+Porque no toca el servidor. La regla del §22 —vista previa, confirmación y transacción— es para lo
+que **escribe**. Descartar es lo contrario: tira lo que aún no se ha escrito, y lo que queda es lo
+que hay en la tabla. Un diálogo ahí sería fricción en la acción segura. Confirmar sí escribe, y para
+eso está el otro botón.
+
+### 32.5. Verificación
+
+| Qué                                         | Estado                                            |
+| ------------------------------------------- | ------------------------------------------------- |
+| Unitarios nuevos (`pendingChanges.test.ts`) | ✅ 6, sobre qué filas se revierten y en qué orden |
+| Suite completa                              | ✅ sin regresiones                                |
+| Contra SQL Server real, en el VS Code real  | ✅ los dos caminos, ver abajo                     |
+| `lint` y los dos typechecks                 | ✅                                                |
+
+De punta a punta contra la instancia de §28.2, sobre `dbo.DSHB_NavigationNodes`:
+
+- **Descartar**: se editan dos celdas (`Informes de ventas` → `Informes de ventas (2026)` y
+  `Indicadores` → `Indicadores clave`), la barra pasa a «Confirmar (2) / Descartar (2)» con las dos
+  celdas resaltadas; se pulsa descartar y vuelven los valores, la cuenta desaparece de los dos
+  botones, el resaltado se va y los botones quedan deshabilitados.
+- **Confirmar**: las mismas dos ediciones, se pulsa confirmar, sale «Changes saved successfully» y
+  `SELECT` directo contra la tabla —desde fuera de VS Code— devuelve los valores nuevos.
+
+Coste en deuda de merge: el botón «Save Changes» del upstream **sustituido** por el par (es
+exactamente lo que se pidió cambiar), y tres archivos suyos con añadidos marcados con `// [FORK]`.
+
+### 32.6. Lo que esto deliberadamente no hace
+
+- **No descarta media edición.** Es todo o nada. Para una sola fila ya está el botón de deshacer de
+  la fila, que es de donde sale este.
+- **No pregunta antes de descartar** (§32.4).
+- **No cambia la rejilla de resultados de consulta**, que no tiene sesión de edición detrás: allí
+  editar en línea es otro problema, no un botón. Ver §33.

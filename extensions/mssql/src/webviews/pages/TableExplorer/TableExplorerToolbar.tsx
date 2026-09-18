@@ -20,7 +20,6 @@ import {
     tokens,
 } from "@fluentui/react-components";
 import {
-    SaveRegular,
     AddRegular,
     CodeRegular,
     OrganizationRegular,
@@ -37,6 +36,8 @@ import { useTableExplorerSelector } from "./tableExplorerSelector";
 import { ApiStatus } from "../../../sharedInterfaces/webview";
 import type { DataColumnVisibility } from "./TableDataGrid";
 import { submitTableExplorerRowCountReload } from "./tableDataGridUtils";
+// [FORK] §32: confirmar en verde y descartar en rojo, con la cuenta de cambios.
+import { PendingChangesButtons } from "../../../custom/webviews/TableExplorer/pendingChangesButtons";
 
 const useStyles = makeStyles({
     filterButtonActive: {
@@ -53,6 +54,8 @@ const useStyles = makeStyles({
 
 interface TableExplorerToolbarProps {
     onSave: () => Promise<void>;
+    // [FORK] §32: descartar los cambios pendientes, el par del guardado.
+    onDiscard: () => Promise<void>;
     onAddRow?: () => Promise<void>;
     cellChangeCount: number;
     deletionCount: number;
@@ -127,6 +130,7 @@ const ColumnsMenu: React.FC<ColumnsMenuProps> = ({
 
 export const TableExplorerToolbar: React.FC<TableExplorerToolbarProps> = ({
     onSave,
+    onDiscard,
     onAddRow,
     cellChangeCount,
     deletionCount,
@@ -225,21 +229,17 @@ export const TableExplorerToolbar: React.FC<TableExplorerToolbarProps> = ({
     // Total changes includes both cell edits and row deletions
     const changeCount = cellChangeCount + deletionCount;
 
-    const saveButtonText =
-        changeCount > 0
-            ? `${loc.tableExplorer.saveChanges} (${changeCount})`
-            : loc.tableExplorer.saveChanges;
-
     return (
         <Toolbar>
-            <ToolbarButton
-                aria-label={saveButtonText}
-                title={saveButtonText}
-                icon={<SaveRegular />}
-                onClick={handleSave}
-                disabled={changeCount === 0 || isLoading || isSaving}>
-                {saveButtonText}
-            </ToolbarButton>
+            {/* [FORK] El par confirmar/descartar. Sustituye al botón «Save Changes», que
+                confirmaba pero no tenía con qué descartar. Ver
+                src/custom/webviews/TableExplorer/pendingChangesButtons.tsx y FORK.md §32. */}
+            <PendingChangesButtons
+                changeCount={changeCount}
+                onConfirm={handleSave}
+                onDiscard={onDiscard}
+                disabled={isLoading || isSaving}
+            />
             <ToolbarButton
                 aria-label={loc.tableExplorer.addRow}
                 title={loc.tableExplorer.addRow}

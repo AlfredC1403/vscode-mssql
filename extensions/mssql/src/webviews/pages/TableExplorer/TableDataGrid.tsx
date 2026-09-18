@@ -54,6 +54,8 @@ import {
     TableExplorerRowMutationQueue,
     tryLockTableExplorerRow,
 } from "./tableDataGridUtils";
+// [FORK] §32: qué filas hay que revertir para descartarlo todo.
+import { pendingRowIds } from "../../../custom/webviews/TableExplorer/pendingChanges";
 
 export type { AppliedSortColumn };
 
@@ -114,6 +116,12 @@ export interface DataColumnVisibility {
 
 export interface TableDataGridRef {
     clearAllChangeTracking: () => void;
+    /**
+     * [FORK] Revierte todo lo pendiente, para el botón de descartar de la barra. Vive aquí porque
+     * la cuenta de cambios y el resaltado son de la rejilla: revertir desde fuera devolvía los
+     * valores y dejaba la barra diciendo «(2)» con las celdas marcadas. Ver FORK.md §32.
+     */
+    revertAllPendingRows: () => Promise<void>;
     getCellChangeCount: () => number;
     goToLastPage: () => void;
     goToFirstPage: () => void;
@@ -260,6 +268,19 @@ export const TableDataGrid = forwardRef<TableDataGridRef, TableDataGridProps>(
         // Expose methods to parent via ref
         useImperativeHandle(ref, () => ({
             clearAllChangeTracking,
+            // [FORK] Descartar = revertir una por una las filas con algo pendiente, reusando el
+            // mismo `revertRow` del botón de deshacer de la fila: hace la llamada al STS, limpia el
+            // seguimiento de la fila y avisa de la nueva cuenta. Al terminar la cuenta es cero
+            // porque cada revertido la fue bajando, no porque se ponga a cero. FORK.md §32.
+            revertAllPendingRows: async () => {
+                for (const rowId of pendingRowIds(
+                    cellChangesRef.current.values(),
+                    deletedRowsRef.current,
+                    newRowIdsRef.current,
+                )) {
+                    await revertRow(rowId);
+                }
+            },
             getCellChangeCount: () => cellChangesRef.current.size,
             goToLastPage: () => {
                 if (reactGridRef.current?.paginationService && reactGridRef.current?.dataView) {

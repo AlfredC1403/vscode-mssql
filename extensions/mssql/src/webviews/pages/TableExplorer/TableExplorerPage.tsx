@@ -379,6 +379,12 @@ export const TableExplorerPage: React.FC = () => {
         }
     };
 
+    // [FORK] §32: descartar es revertir todo lo pendiente. Lo resuelve la rejilla, que es quien
+    // sabe qué filas tienen algo y quien lleva la cuenta y el resaltado.
+    const handleDiscard = async () => {
+        await gridRef.current?.revertAllPendingRows();
+    };
+
     const handleCellChangeCountChanged = (count: number) => {
         setCellChangeCount(count);
     };
@@ -394,6 +400,8 @@ export const TableExplorerPage: React.FC = () => {
                     <div className={classes.contentArea}>
                         <TableExplorerToolbar
                             onSave={handleSave}
+                            // [FORK] §32: la otra mitad del par, descartar.
+                            onDiscard={handleDiscard}
                             onAddRow={handleAddRow}
                             cellChangeCount={cellChangeCount}
                             deletionCount={deletionCount}

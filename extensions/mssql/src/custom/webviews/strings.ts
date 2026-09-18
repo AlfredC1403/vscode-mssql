@@ -527,6 +527,13 @@ export const WebviewStrings = {
         previewCandidate: "Como quedaría (sin aplicar)",
         previewSame: "Igual: no hay cambios sin aplicar",
     },
+    /** Confirmar y descartar los cambios pendientes del editor de datos (§32). */
+    tableExplorer: {
+        confirm: (count: number) => (count > 0 ? `Confirmar (${count})` : "Confirmar"),
+        discard: (count: number) => (count > 0 ? `Descartar (${count})` : "Descartar"),
+        confirmTooltip: "Aplica los cambios pendientes en el servidor",
+        discardTooltip: "Descarta los cambios pendientes. No toca el servidor",
+    },
     /** El registro al que apunta una clave ajena (§31). */
     referencedRow: {
         title: "Registro referenciado",
