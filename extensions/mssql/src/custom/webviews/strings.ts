@@ -527,4 +527,28 @@ export const WebviewStrings = {
         previewCandidate: "Como quedaría (sin aplicar)",
         previewSame: "Igual: no hay cambios sin aplicar",
     },
+    /** El registro al que apunta una clave ajena (§31). */
+    referencedRow: {
+        title: "Registro referenciado",
+        /** La entrada del menú contextual de la rejilla de resultados. */
+        menuItem: "Ver registro referenciado",
+        /** Encabezados de las tres secciones, en el orden del razonamiento de quien mira. */
+        origin: "Celda de origen",
+        target: "Clave ajena",
+        record: "Registro",
+        /** Marca de la columna por la que se llegó hasta este registro. */
+        matchMark: "\u2190 por aquí",
+        loading: "Consultando\u2026",
+        close: "Cerrar",
+        unknownSource: (column: string) =>
+            `No se pudo averiguar de qué tabla sale la columna ${column}. Suele pasar con columnas calculadas, o cuando lo ejecutado no es una consulta simple: prueba a ejecutar solo el SELECT.`,
+        /** Los finales que no son «aquí está la fila». Cada uno dice qué pasó y por qué. */
+        noForeignKey: (column: string) =>
+            `La columna ${column} no participa en ninguna clave ajena, así que no apunta a ningún registro.`,
+        compositeKey: (constraint: string) =>
+            `La clave ajena ${constraint} es de varias columnas. Con el valor de una sola celda no se puede identificar la fila, así que no se consulta ninguna.`,
+        nullValue: "El valor de la celda es NULL, así que no apunta a ningún registro.",
+        notFound: (table: string) =>
+            `No hay ningún registro en ${table} con ese valor. Puede que se haya borrado, o que la integridad no esté declarada.`,
+    },
 } as const;

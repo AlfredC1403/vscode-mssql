@@ -4,6 +4,11 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { NotificationType, RequestType } from "vscode-jsonrpc";
+// [FORK] Tipos del registro referenciado (§31).
+import {
+    ReferencedRowRequestParams,
+    ReferencedRowResult,
+} from "../custom/sharedInterfaces/referencedRow";
 import {
     ExecutionPlanReducers,
     ExecutionPlanState,
@@ -575,4 +580,12 @@ export enum GridContextMenuAction {
     CopyAsJson = "copy-as-json",
     CopyAsInClause = "copy-as-in-clause",
     CopyAsInsertInto = "copy-as-insert-into",
+}
+
+// [FORK] Petición del fork: la rejilla manda la celda y el host resuelve la clave ajena.
+// Los tipos viven en src/custom/sharedInterfaces/referencedRow.ts. FORK.md §31.
+export namespace ShowReferencedRowRequest {
+    export const type = new RequestType<ReferencedRowRequestParams, ReferencedRowResult, void>(
+        "sqlworksShowReferencedRow",
+    );
 }

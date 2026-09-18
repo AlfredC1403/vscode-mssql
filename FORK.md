@@ -61,6 +61,10 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/package.json` | **M9, 1 línea**: `"visibility": "collapsed"` en nuestra vista `sqlworksSnippets` | Visible por omisión materializaba un segundo `iframe.webview` y rompía dos e2e del upstream, y con ellos los puntos 1 y 7 de la lista de paridad (§26.4). Se arregla en **nuestra** contribución, no en el arnés del upstream | M9 |
 | `extensions/mssql/package.json` | **§29**: `editor.quickSuggestions` dentro del `[sql]` de `contributes.configurationDefaults`, que ya existía | VS Code trae `other` en `offWhenInlineCompletions` y con Copilot delante la lista no se abría sola: solo con Ctrl+Espacio (§29.2). Es un valor de fábrica, por debajo de los ajustes del usuario. **Ninguna línea del upstream sustituida** | §29 |
 | `extensions/mssql/src/views/statusView.ts` | **§30, 6 líneas**: un guardia al principio de `showStatusBarItem` que esconde `statusConnection` y `statusChangeDatabase` | El selector del fork los pinta a la izquierda. Sin el guardia, servidor y base salen dos veces en la misma barra (§30.2). **Ninguna línea del upstream sustituida** | §30 |
+| `extensions/mssql/src/sharedInterfaces/queryResult.ts` | **§31**: el tipo de petición `ShowReferencedRowRequest` y el `import` de los tipos del fork | La rejilla del upstream es quien la manda y quien pinta la respuesta, así que el contrato tiene que estar donde ella lo ve | §31 |
+| `extensions/mssql/src/queryResult/queryResultWebViewController.ts` | **§31, 3 líneas**: el `import` y el manejador de esa petición | Su controlador es el único que puede atenderla. La resolución vive en `src/custom/results/` | §31 |
+| `extensions/mssql/src/webviews/pages/QueryResult/queryResultFluentResultGrid.tsx` | **§31**: la contribución `sqlworks.showReferencedRow` al menú de celda, su caso, y el globo junto a la rejilla | La rejilla admite comandos de terceros por diseño; lo que hay que tocar es el consumidor que arma la configuración (§31.1) | §31 |
+| `extensions/mssql/src/webviews/common/FluentResultGrid/internal/fluentResultGridCommandController.ts` | **§31, 6 líneas y un helper**: el menú contextual de celda lleva ahora la celda en su contexto | Hasta aquí `cell` solo lo rellenaba el doble clic, así que un comando del menú **de celda** no sabía sobre qué celda se había pulsado (§31.4) | §31 |
 | `extensions/mssql/package.json` | **§30**: `mssql.query.showActiveConnectionAsCodeLensSuggestion` pasa a `default: false` | El CodeLens de la línea 0 se desplaza con el texto y deja de verse (§30.1). El ajuste sigue declarado: quien lo quiera lo enciende | §30 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
@@ -121,17 +125,21 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                        | Para qué                                                                                                                                                                                                                                                     |
-| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`           | El corte de telemetría, documentado                                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`  | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
-| `extensions/mssql/images/sqlworksIcon.png`                     | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
-| `extensions/mssql/scripts/package-fork.js`                     | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
-| `NOTICE.md`                                                    | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
-| `extensions/mssql/test/harness/stsCompletionProbe.mjs`         | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
-| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`   | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
-| `extensions/mssql/src/custom/connection/connectionSelector.ts` | El selector de servidor y base en la barra de estado (§30)                                                                                                                                                                                                   |
-| `FORK.md`                                                      | Este archivo                                                                                                                                                                                                                                                 |
+| Archivo                                                                       | Para qué                                                                                                                                                                                                                                                     |
+| ----------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`                          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`                 | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `extensions/mssql/test/harness/stsCompletionProbe.mjs`                        | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
+| `extensions/mssql/test/unit/custom/quickSuggestions.test.ts`                  | Fija §29: que las sugerencias se abran solas al escribir, también con sugerencias en línea delante                                                                                                                                                           |
+| `extensions/mssql/src/custom/connection/connectionSelector.ts`                | El selector de servidor y base en la barra de estado (§30)                                                                                                                                                                                                   |
+| `extensions/mssql/src/custom/results/referencedRow.ts`                        | Resuelve la clave ajena de una celda y lee la fila a la que apunta (§31)                                                                                                                                                                                     |
+| `extensions/mssql/src/custom/results/foreignKeyLookup.ts`                     | Las tres consultas de §31, con sus reglas de entrecomillado                                                                                                                                                                                                  |
+| `extensions/mssql/src/custom/webviews/ReferencedRow/referencedRowPopover.tsx` | El globo que las enseña, anclado a la celda (§31.4)                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/referencedRow.test.ts`                     | Fija el texto que se manda al servidor: identificadores validados y valor parametrizado                                                                                                                                                                      |
+| `FORK.md`                                                                     | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -3395,3 +3403,139 @@ principio de `showStatusBarItem` y el `default` de un ajuste que ya estaba decla
 - **No abre su propia conexión** ni duplica el gestor del upstream (regla 16.2 del brief): los dos
   elementos lanzan los comandos que ya existen.
 - **No toca el explorador de objetos**, que es el otro sitio donde se cambia de servidor.
+
+---
+
+## 31. El registro al que apunta una clave ajena
+
+Petición del usuario: «en dbForge, en los resultados, cuando una columna es una FK, puedo abrir un
+popup que muestra el registro de esa FK en la tabla dueña».
+
+Clic derecho sobre la celda → **Ver registro referenciado** → un globo encima de la celda con la fila
+de la tabla a la que apunta.
+
+### 31.1. Dónde se engancha, y por qué ahí
+
+La rejilla de resultados nueva (`mssql.preview.betaResultsGrid`, **`true` de fábrica**) está escrita
+para que le añadan comandos: sus ids son cadenas y su propia documentación dice que los de terceros
+lleven prefijo («Consumer-contributed command ids should also be namespaced»). Así que el comando del
+fork es `sqlworks.showReferencedRow` y **no hace falta tocar el componente de la rejilla** para que
+salga en el menú: se declara una contribución más en la configuración que arma el consumidor.
+
+La rejilla vieja (con el ajuste apagado) se queda fuera **a propósito**. Se llegó a enganchar —el
+menú del `GridContextMenu.tsx` y su plugin— y se revirtió: el globo tiene que vivir dentro del
+webview, y montarlo también allí era duplicar la mitad de esto por un camino que de fábrica nadie
+usa. Si algún día la rejilla vieja vuelve a ser la de serie, esto se añade; mientras tanto, mejor una
+cosa entera que dos a medias.
+
+### 31.2. El hallazgo que cambió el diseño
+
+`columnInfo` de cada conjunto de resultados trae `baseSchemaName`, `baseTableName` y
+`baseColumnName`. Son exactamente lo que hace falta para saber de qué tabla sale una columna, así
+que la primera versión los usó.
+
+**Medido contra el STS 6.0.20260915.1, con `query/executeString` sobre `SELECT * FROM dbo.DSHB_Widget`:**
+
+```
+WidgetId      baseSchema=null baseTable=null baseColumn=null isKey=null
+NavigationId  baseSchema=null baseTable=null baseColumn=null isKey=null
+WidgetTitle   baseSchema=null baseTable=null baseColumn=null isKey=null
+```
+
+Los tres a `null` en todas las columnas. La función estaba escrita, compilaba, y el globo decía
+siempre «esta columna no participa en ninguna clave ajena» porque nunca sabía de qué tabla venía.
+
+Lo que sí funciona es preguntárselo al servidor:
+
+```
+sys.dm_exec_describe_first_result_set(N'SELECT * FROM dbo.DSHB_Widget;', NULL, 1)
+  WidgetId     | dbo | DSHB_Widget | WidgetId
+  NavigationId | dbo | DSHB_Widget | NavigationId
+  WidgetTitle  | dbo | DSHB_Widget | WidgetTitle
+```
+
+**No ejecuta nada**: describe el primer conjunto de un lote. El tercer argumento a 1 pide la
+información de exploración, que es la que trae `source_schema`, `source_table` y `source_column`.
+
+El texto se saca del documento del resultado. Si es un script con varios lotes se prueban los lotes
+separados por `GO`, del último al primero —en un script de migración lo que se acaba de ejecutar
+suele estar al final—. Si aun así no encaja, el globo lo **dice**, en lugar de enseñar la fila de una
+tabla adivinada.
+
+### 31.3. Las tres consultas, y qué protege cada una
+
+1. **De qué tabla sale la columna** (`describeResultColumnsQuery`): el texto de la consulta va como
+   literal escapado.
+2. **Qué clave ajena es** (`foreignKeyForColumnQuery`): esquema, tabla y columna pasan por
+   `quoteIdentifier` de `util/identifiers.ts`, que valida contra el patrón cerrado del §19.2 y
+   **aborta** si no encaja. Regla 11.2 del brief.
+3. **La fila** (`referencedRowQuery`): la sentencia que lee va con `sp_executesql` y el valor entra
+   como **`@valor`**, no pegado al `WHERE`.
+
+El valor de la celda es el único dato que no es un identificador: puede ser cualquier texto. Se
+escribe como literal Unicode con las comillas simples dobladas, que es **el** escape de un literal de
+cadena en T-SQL —no hay otro—, así que con `QUOTED_IDENTIFIER ON` no puede salirse de sus comillas.
+Hay un test que lo fija con el intento clásico: `x'; DROP TABLE t; --` sale como
+`N'x''; DROP TABLE t; --'`, un literal y nada más.
+
+`TOP (2)` y no `TOP (1)`: si la columna referenciada no fuera única, quien llama tiene que poder
+notarlo en vez de enseñar la primera fila como si fuera la única.
+
+### 31.4. Un globo, no un panel
+
+La primera versión abría un panel de editor al lado. Funcionaba y estaba mal: no es lo que hace
+dbForge ni lo que se pidió. Un panel roba espacio, se queda abierto y hay que ir a cerrarlo; lo que
+se quiere es mirar una fila y seguir.
+
+El globo vive **dentro del webview de resultados**, que es lo que permite anclarlo a la celda: desde
+el host no hay forma de poner nada flotando sobre un webview. Se ancla en el punto del clic derecho,
+que se recuerda con un escucha de `contextmenu` en captura, porque el evento de comando de la rejilla
+no lleva coordenadas.
+
+Eso obligó a un cambio pequeño en la rejilla: `commandContext.cell` **solo lo rellenaba el doble
+clic** (`OpenCell`), así que un comando del menú de celda no sabía sobre qué celda se había pulsado.
+Ahora el menú lo lleva. Son seis líneas y un helper, y es un arreglo del componente, no un parche: un
+menú _de celda_ que no sabe su celda es un hueco suyo.
+
+### 31.5. Cuando no hay registro que enseñar
+
+Nunca se queda en blanco ni «no hace nada». Cada final dice qué pasó:
+
+| Situación                                  | Qué se ve                                        |
+| ------------------------------------------ | ------------------------------------------------ |
+| La columna no es clave ajena               | Se dice, con el nombre de la columna             |
+| La clave ajena es de varias columnas       | Se dice, con el nombre de la restricción         |
+| El valor de la celda es `NULL`             | Se dice: no apunta a ninguna fila                |
+| La fila no está                            | Se dice, con la tabla: borrada, o sin integridad |
+| No se pudo saber de qué tabla sale (§31.2) | Se dice, y se sugiere ejecutar solo el `SELECT`  |
+
+Con una clave compuesta **no se consulta nada**: adivinar las otras columnas sería enseñar una fila
+que quizá no es la que apunta.
+
+### 31.6. Verificación
+
+| Qué                                        | Estado                                         |
+| ------------------------------------------ | ---------------------------------------------- |
+| Unitarios nuevos (`referencedRow.test.ts`) | ✅ 16, sobre el texto que se manda al servidor |
+| Suite completa                             | ✅ sin regresiones                             |
+| Contra SQL Server real, en el VS Code real | ✅ ver abajo                                   |
+| `lint` y los dos typechecks                | ✅                                             |
+
+Probado de punta a punta contra la instancia de §28.2, con
+`dbo.DSHB_Widget.NavigationId → dbo.DSHB_NavigationNodes.NavigationId`: clic derecho sobre la celda
+con valor 2, «Ver registro referenciado», y el globo sale sobre la celda con `NavigationId 2`,
+`DSHB_Title Informes de ventas`, `NavigationOrder 2`, con la columna de enlace destacada.
+
+Coste en deuda de merge: **ninguna línea del upstream sustituida**. Cuatro archivos suyos con
+añadidos marcados con `// [FORK]`.
+
+### 31.7. Lo que esto deliberadamente no hace
+
+- **No navega en cadena.** El globo enseña la fila y se cierra; no permite saltar desde ahí a la
+  siguiente clave ajena. Es lo siguiente que pediría cualquiera, pero ata el diseño a un historial y
+  conviene ver antes si esto se usa.
+- **No enseña las filas que apuntan _hacia_ esta** (el camino inverso, de padre a hijos). Es otra
+  función, y con otro coste: son muchas filas, no una.
+- **No toca la rejilla vieja** (§31.1).
+- **No cachea nada.** Cada apertura son tres consultas de catálogo, que contra el servidor de la
+  conexión son inmediatas. Si algún día molesta, se cachea el resultado de §31.2 por documento.

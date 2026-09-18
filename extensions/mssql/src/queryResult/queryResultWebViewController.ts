@@ -5,6 +5,8 @@
 
 import * as vscode from "vscode";
 import * as qr from "../sharedInterfaces/queryResult";
+// [FORK] §31.
+import { showReferencedRow } from "../custom/results/referencedRow";
 import * as Constants from "../constants/constants";
 import * as LocalizedConstants from "../constants/locConstants";
 import { WebviewViewController } from "../controllers/webviewViewController";
@@ -299,6 +301,12 @@ export class QueryResultWebviewController extends WebviewViewController<
     }
 
     private registerRpcHandlers() {
+        // [FORK] «Ver registro referenciado» del menú contextual de la rejilla. La resolución de la
+        // clave ajena y el panel viven en src/custom/results/referencedRow.ts. FORK.md §31.
+        this.onRequest(qr.ShowReferencedRowRequest.type, async (message) => {
+            return await showReferencedRow(message);
+        });
+
         this.onRequest(qr.OpenInNewTabRequest.type, async (message) => {
             void this.createPanelController(message.uri);
 

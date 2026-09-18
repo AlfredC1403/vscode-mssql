@@ -8,6 +8,7 @@ import ConnectionManager from "../controllers/connectionManager";
 import { TreeNodeInfo } from "../objectExplorer/nodes/treeNodeInfo";
 import { AdminPanelController } from "./admin/panels/adminPanelController";
 import { ConnectionSelector } from "./connection/connectionSelector";
+import { useConnectionManager } from "./results/referencedRow";
 import { SnippetCompletionProvider } from "./snippets/completion";
 import { SnippetsViewController } from "./snippets/snippetsViewController";
 import { FormatProfilesController } from "./format/formatProfilesController";
@@ -122,6 +123,12 @@ export function registerCustom(
             pickAndApplyProfile(context),
         ),
     );
+
+    // --- §31: el registro al que apunta una clave ajena ---
+    //
+    // Lo dispara el menú contextual de la rejilla de resultados, cuyo controlador es del upstream y
+    // **no recibe el gestor de conexiones**. Se lo dejamos aquí. Ver `results/referencedRow.ts`.
+    useConnectionManager(connectionManager);
 
     // --- §30: el selector de conexión, siempre a la vista ---
     //

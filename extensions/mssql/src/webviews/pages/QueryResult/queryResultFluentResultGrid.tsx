@@ -18,6 +18,15 @@ import {
 } from "../../common/FluentResultGrid";
 import "../../common/FluentResultGrid/FluentResultGrid.vscode.css";
 import { locConstants } from "../../common/locConstants";
+// [FORK] §31: el comando propio del fork en el menú de celda.
+import { WebviewStrings as CustomStrings } from "../../../custom/webviews/strings";
+import {
+    ReferencedRowPopover,
+    useReferencedRowPopover,
+} from "../../../custom/webviews/ReferencedRow/referencedRowPopover";
+
+/** [FORK] Id del comando del fork. La rejilla pide que los de terceros lleven prefijo. */
+const FORK_SHOW_REFERENCED_ROW = "sqlworks.showReferencedRow";
 import { useVscodeWebview } from "../../common/vscodeWebviewProvider";
 import {
     ColorThemeKind,
@@ -240,6 +249,17 @@ function getQueryResultFluentGridCommandConfiguration(): FluentResultGridCommand
                 placements: [placement.CellContextMenu, placement.Keyboard],
                 groupId: "clipboard",
                 order: 210,
+            },
+            // [FORK] El registro al que apunta la clave ajena de la celda. La rejilla admite
+            // comandos de terceros con id propio, así que no hace falta tocarla. FORK.md §31.
+            {
+                id: FORK_SHOW_REFERENCED_ROW,
+                // Los incorporados dejan `label` vacío y lo sacan del mapa de textos, que está
+                // tipado solo con sus ids. Una contribución de terceros lleva el suyo aquí.
+                label: CustomStrings.referencedRow.menuItem,
+                placements: [placement.CellContextMenu],
+                groupId: "sqlworks",
+                order: 400,
             },
             {
                 id: FluentResultGridCommand.CopyHeaders,
@@ -683,6 +703,9 @@ const QueryResultFluentResultGrid = forwardRef<ResultGridHandle, ResultGridProps
         [props.onSelectionChange],
     );
 
+    // [FORK] §31: el globo con el registro al que apunta la clave ajena de la celda.
+    const referencedRow = useReferencedRowPopover();
+
     const handleCommand = useCallback(
         async (event: FluentResultGridCommandEvent) => {
             if (!context || !uri) {
@@ -691,6 +714,25 @@ const QueryResultFluentResultGrid = forwardRef<ResultGridHandle, ResultGridProps
 
             const selection = [...(event.selection ?? [])];
             switch (event.commandId) {
+                // [FORK] §31. `event.cell` trae la celda con su valor; de qué tabla sale la columna
+                // lo resuelve el host, porque el STS devuelve `baseTableName` a null (§31.2).
+                case FORK_SHOW_REFERENCED_ROW: {
+                    const cell = event.cell;
+                    if (!cell) {
+                        break;
+                    }
+                    const column = resultSetSummary?.columnInfo?.[cell.columnIndex];
+                    // El globo se abre ya, en «consultando», y se rellena cuando el host responde.
+                    await referencedRow.open(() =>
+                        context.extensionRpc.sendRequest(qr.ShowReferencedRowRequest.type, {
+                            ownerUri: uri,
+                            columnIndex: cell.columnIndex,
+                            columnName: column?.columnName ?? "",
+                            value: cell.value?.isNull ? null : (cell.value?.displayValue ?? null),
+                        }),
+                    );
+                    break;
+                }
                 case FluentResultGridCommand.CopySelection:
                     await context.extensionRpc.sendRequest(qr.CopySelectionRequest.type, {
                         uri,
@@ -812,7 +854,7 @@ const QueryResultFluentResultGrid = forwardRef<ResultGridHandle, ResultGridProps
                     break;
             }
         },
-        [context, props, uri],
+        [context, props, referencedRow, resultSetSummary, uri],
     );
 
     const handleThresholdExceeded = useCallback(async () => {
@@ -834,33 +876,37 @@ const QueryResultFluentResultGrid = forwardRef<ResultGridHandle, ResultGridProps
     }
 
     return (
-        <FluentResultGrid
-            ref={ref}
-            gridId={props.gridId}
-            resultSetSummary={resultSetSummary}
-            dataSource={dataSource}
-            heightMode={{ kind: "fill" }}
-            showRowNumberColumn
-            autoSizeColumnsMode={autoSizeColumnsMode}
-            inMemoryDataProcessingThreshold={inMemoryDataProcessingThreshold}
-            gridSettings={gridSettings}
-            rowHeight={getRowHeight(
-                fontSettings?.fontSize,
-                normalizeRowPadding(gridSettings?.rowPadding),
-            )}
-            toolbar={{ visible: true }}
-            viewMode={props.viewMode === qr.QueryResultViewMode.Text ? "text" : "grid"}
-            canToggleViewMode
-            canToggleMaximize={props.canToggleMaximize}
-            isMaximized={props.isMaximized}
-            initialState={initialState}
-            initialStateReady={isInitialStateLoaded}
-            onCommand={handleCommand}
-            onStateChange={handleStateChange}
-            onSelectionChange={handleSelectionChange}
-            onSelectionSummaryChange={handleSelectionSummaryChange}
-            onInMemoryDataProcessingThresholdExceeded={handleThresholdExceeded}
-        />
+        <>
+            <FluentResultGrid
+                ref={ref}
+                gridId={props.gridId}
+                resultSetSummary={resultSetSummary}
+                dataSource={dataSource}
+                heightMode={{ kind: "fill" }}
+                showRowNumberColumn
+                autoSizeColumnsMode={autoSizeColumnsMode}
+                inMemoryDataProcessingThreshold={inMemoryDataProcessingThreshold}
+                gridSettings={gridSettings}
+                rowHeight={getRowHeight(
+                    fontSettings?.fontSize,
+                    normalizeRowPadding(gridSettings?.rowPadding),
+                )}
+                toolbar={{ visible: true }}
+                viewMode={props.viewMode === qr.QueryResultViewMode.Text ? "text" : "grid"}
+                canToggleViewMode
+                canToggleMaximize={props.canToggleMaximize}
+                isMaximized={props.isMaximized}
+                initialState={initialState}
+                initialStateReady={isInitialStateLoaded}
+                onCommand={handleCommand}
+                onStateChange={handleStateChange}
+                onSelectionChange={handleSelectionChange}
+                onSelectionSummaryChange={handleSelectionSummaryChange}
+                onInMemoryDataProcessingThresholdExceeded={handleThresholdExceeded}
+            />
+            {/* [FORK] §31: el registro al que apunta la clave ajena, encima de la celda. */}
+            <ReferencedRowPopover state={referencedRow.state} onClose={referencedRow.close} />
+        </>
     );
 });
 

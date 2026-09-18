@@ -21,6 +21,8 @@ import {
     type FluentResultGridCommandContext,
     type FluentResultGridCommandEvent,
 } from "../types/fluentResultGridCommands";
+// [FORK] §31: la celda que ahora se lleva el menú contextual.
+import { type FluentResultGridCellContext } from "../types/fluentResultGridPrimitives";
 import { FluentResultGridCommand } from "../types/fluentResultGridCommandIds";
 import type { FluentResultGridProps } from "../types/fluentResultGridProps";
 import type { FluentResultGridState } from "../types/fluentResultGridState";
@@ -883,6 +885,10 @@ export function useFluentResultGridCommandController({
                         grid,
                         grid.getDataLength(),
                     ),
+                    // [FORK] La celda sobre la que se abrió el menú. Hasta aquí `cell` solo lo
+                    // rellenaba el doble clic (`OpenCell`), así que un comando del menú de celda no
+                    // sabía sobre qué celda se había pulsado. FORK.md §31.
+                    cell: forkCellFromEvent(grid, eventData),
                 },
                 commands,
                 onCommand: handleCommand,
@@ -910,4 +916,37 @@ export function useFluentResultGridCommandController({
         showAllColumns,
         toggleSortForColumn,
     };
+}
+
+/**
+ * [FORK] La celda sobre la que ocurrió un evento del ratón, con su valor. FORK.md §31.
+ *
+ * Reproduce el mapeo que ya hace `handleClick` para `OpenCell`: de la columna de la rejilla a la
+ * columna del resultado, saltándose la del número de fila. Devuelve `undefined` cuando el clic no
+ * cae sobre una celda de datos, y entonces el contexto simplemente no lleva celda.
+ */
+function forkCellFromEvent(
+    grid: SlickGrid,
+    eventData: MouseEvent,
+): FluentResultGridCellContext | undefined {
+    const position = grid.getCellFromEvent(eventData);
+    if (!position) {
+        return undefined;
+    }
+    const columnDefinition = grid.getColumns()[position.cell] as
+        | Column<FluentResultGridDataRow>
+        | undefined;
+    if (!columnDefinition) {
+        return undefined;
+    }
+    const resultColumnIndex = getFluentResultGridColumnIndexFromColumn(columnDefinition);
+    if (resultColumnIndex === undefined) {
+        return undefined;
+    }
+    const row = grid.getDataItem(position.row) as FluentResultGridDataRow | undefined;
+    const value = row?.[resultColumnIndex.toString()] as DbCellValue | undefined;
+    if (!value || typeof value !== "object") {
+        return undefined;
+    }
+    return { rowIndex: position.row, columnIndex: resultColumnIndex, value };
 }

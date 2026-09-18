@@ -270,6 +270,14 @@ export const Strings = {
         settingEnabled: (label: string, key: string, scope: string) =>
             `SQLWorks: ${label} está activado en los ajustes de ${scope} (\`${key}\`). Esa función descarga y ejecuta un binario desde un feed externo, que no es lo que este fork hace por omisión. Ver FORK.md §26.8.`,
     },
+    /** El registro al que apunta una clave ajena (§31). Lo demás lo dice el globo del webview. */
+    referencedRow: {
+        /** Salvaguarda: el fork se registró sin gestor de conexiones. No debería pasar. */
+        noConnectionManager:
+            "SQLWorks no tiene el gestor de conexiones disponible, así que no puede consultar el registro referenciado.",
+        unknownSource: (column: string) =>
+            `No se pudo averiguar de qué tabla sale la columna ${column}. Suele pasar con columnas calculadas, o cuando lo ejecutado no es una consulta simple: prueba a ejecutar solo el SELECT.`,
+    },
     /** El selector de servidor y base de datos de la barra de estado (§30). */
     connectionSelector: {
         /** Sin conexión en este documento. */
