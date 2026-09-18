@@ -271,7 +271,14 @@ export default [
             "extensions/mssql/src/custom/**/*.ts",
             "extensions/mssql/src/custom/**/*.tsx",
             "extensions/mssql/test/unit/custom/**/*.ts",
+            "extensions/mssql/test/harness/**/*.mjs",
         ],
+        // Los bloques de arriba declaran el plugin para los archivos de TypeScript de la extensión.
+        // El arnés es `.mjs` y no lo alcanza ninguno, así que sin esto `notice/notice` se queda sin
+        // plugin y ESLint falla al cargar la configuración.
+        plugins: {
+            notice,
+        },
         rules: {
             "notice/notice": [
                 "error",

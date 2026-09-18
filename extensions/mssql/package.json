@@ -1929,12 +1929,6 @@
                         "type": "object"
                     }
                 },
-                "sqlworks.intelliSense.flexibleMatching": {
-                    "type": "boolean",
-                    "scope": "resource",
-                    "description": "Propone tablas, vistas, columnas, procedimientos y funciones sin distinguir mayúsculas y encontrando lo escrito en cualquier parte del nombre: «dshb» y «navigation» proponen las dos DSHB_Navigation. Apagado manda el filtro del SQL Tools Service, que exige acertar las mayúsculas desde la primera letra.",
-                    "default": true
-                },
                 "sqlworks.snippets.sharedLibraries": {
                     "type": "array",
                     "scope": "resource",

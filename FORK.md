@@ -47,7 +47,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/src/databaseProjects/tools/buildHelper.ts`    | **1 línea**: identificador en línea                                                                                                                                                                                                                    | Ídem, tercera copia                                                                                                                                            | M1   |
 | `extensions/mssql/src/integration/azureResourcesIntegration.ts` | **1 línea**: autoridad del URI `vscode://…/connect`                                                                                                                                                                                                    | VS Code enruta `vscode://<publisher>.<name>/…` al gestor de URI de la extensión                                                                                | M1   |
 | `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo, **más su marcador `// [FORK]` (añadido en M9)**                                                                                                                                               | Quedaban desactualizadas tras el cambio anterior. Era el único archivo de esta tabla sin marcador, así que `git grep "\[FORK\]"` no lo veía (§26.5)            | M1   |
-| `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                       | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
+| `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**`, `test/unit/custom/**` y `test/harness/**` (esta última, §28)                                                                                                                 | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
 
 | `extensions/mssql/package.json` | **M2**: comando `sqlworks.openAdminPanel` y su entrada en `view/item/context` | Anclaje nº1 del brief: así el panel se lanza desde el árbol sin tocar el explorador de objetos | M2 |
 | `extensions/mssql/src/extension.ts` | **M2, 2 líneas más**: el `import` de `registerCustom` y su llamada | Anclaje nº2 del brief: registro único de todo lo que añade el fork | M2 |
@@ -59,8 +59,6 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/package.json` | **M7**: la vista `sqlworksSnippets` (`type: "webview"`) dentro del contenedor `objectExplorer` que ya existe, el comando `sqlworks.showSnippets` y el ajuste `sqlworks.snippets.sharedLibraries` | Punto 12 del brief. Una vista y un comando solo existen si están declarados aquí. Va en el contenedor del upstream en lugar de crear otro, que sería una segunda barra para lo mismo. Es el **único** archivo del upstream que M7 toca | M7 |
 | `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 55 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
 | `extensions/mssql/package.json` | **M9, 1 línea**: `"visibility": "collapsed"` en nuestra vista `sqlworksSnippets` | Visible por omisión materializaba un segundo `iframe.webview` y rompía dos e2e del upstream, y con ellos los puntos 1 y 7 de la lista de paridad (§26.4). Se arregla en **nuestra** contribución, no en el arnés del upstream | M9 |
-| `extensions/mssql/src/languageservice/serviceclient.ts` | **§28, 1 línea sustituida**: la llamada a `next(...)` dentro del `middleware.provideCompletionItem` que ya existía pasa por `provideFlexibleCompletions`. Más el `import` y un `resolveCompletionItem` nuevo en el mismo `middleware` | El filtro de sugerencias del SQL Tools Service distingue mayúsculas, y el STS es un binario descargado que no se puede tocar. El arreglo es aditivo y vive en `src/custom/intellisense/` (§28) | §28 |
-| `extensions/mssql/package.json` | **§28**: el ajuste `sqlworks.intelliSense.flexibleMatching` | Un ajuste solo existe si está declarado aquí. Apagarlo devuelve el comportamiento del STS sin tocar | §28 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -120,17 +118,15 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                            | Para qué                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`               | El corte de telemetría, documentado                                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`      | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
-| `extensions/mssql/images/sqlworksIcon.png`                         | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
-| `extensions/mssql/scripts/package-fork.js`                         | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
-| `NOTICE.md`                                                        | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
-| `FORK.md`                                                          | Este archivo                                                                                                                                                                                                                                                 |
-| `extensions/mssql/src/custom/intellisense/completionMiddleware.ts` | Sugerencias sin distinguir mayúsculas y por cualquier parte del nombre (§28)                                                                                                                                                                                 |
-| `extensions/mssql/src/custom/intellisense/typedWord.ts`            | El identificador que se está escribiendo alrededor del cursor. Puro, sin `vscode`                                                                                                                                                                            |
-| `extensions/mssql/test/unit/custom/completionMatching.test.ts`     | Fija el mecanismo de §28: la segunda petición, el anclaje del rango y que un fallo no empeore lo de hoy                                                                                                                                                      |
+| Archivo                                                       | Para qué                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `extensions/mssql/test/harness/stsCompletionProbe.mjs`        | Sonda JSON-RPC contra el STS: qué devuelve al pedirle sugerencias. Es el arnés nº 2 del §13.1, que se mencionaba sin estar. Cerró §28                                                                                                                        |
+| `FORK.md`                                                     | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -3082,129 +3078,137 @@ su `--folder-uri` y el `import` de `pathToFileURL`—, en un archivo de arnés q
 
 ---
 
-## 28. IntelliSense: sugerencias sin distinguir mayúsculas
+## 28. IntelliSense y las mayúsculas: una hipótesis medida y descartada
 
 Petición del usuario, después de probar el fork. Con una tabla `DSHB_Navigation` en la base:
+escribir `DSHB` la propone, escribir `dshb` no, y `navigation` tampoco aunque esté dentro del
+nombre.
 
-- escribir `DSHB` la propone;
-- escribir `dshb` no propone nada;
-- escribir `navigation` tampoco, aunque esté dentro del nombre.
+**Esta sección documenta un cambio que se escribió, se midió y se retiró.** Está aquí porque la
+medición es el resultado útil: descarta dos explicaciones enteras y deja el problema acotado.
 
-Lo mismo con columnas, procedimientos y funciones. Hay que acertar las mayúsculas, y desde la primera
-letra.
+### 28.1. La hipótesis
 
-### 28.1. Dónde está, y dónde no
+Que el SQL Tools Service filtrara las sugerencias por el texto ya escrito **antes** de responder, con
+un filtro sensible a mayúsculas. Encajaba con todo lo que se veía, y tenía a su favor un argumento
+por descarte que parecía sólido:
 
-La primera sospecha —«será el filtro de VS Code»— es la que hay que descartar antes de tocar nada,
-porque si fuera esa el arreglo sería otro.
+- El comparador de VS Code no distingue mayúsculas ni exige que el encaje empiece en la primera
+  letra.
+- El motor nativo del upstream (`src/sqlLanguage/`) dobla a minúsculas antes de comparar, y además
+  **no está enchufado**: `LanguageFeatureRouter` solo lo usa bajo la preferencia `nativeTypeScript`, y
+  nadie lo construye fuera de sus tests (`git grep -n "LanguageFeatureRouter" -- extensions/mssql/src | grep -v /test/`).
 
-**No es el filtro de VS Code.** El editor filtra la lista que recibe con su propio comparador difuso,
-que ni distingue mayúsculas ni exige que el encaje empiece en la primera letra: le vale cualquier
-frontera de palabra, y `_` es una. Si `DSHB_Navigation` llegara a la lista, escribir `dshb` la
-encontraría, y `navigation` también.
+Si no era ninguno de los dos, tenía que ser el STS. Sobre esa hipótesis se escribió un middleware que
+pedía las sugerencias **dos veces** —en el cursor y en el inicio de la palabra, donde el servidor no
+tendría nada por lo que filtrar— y fusionaba. Iba con 23 tests unitarios y con una nota honesta de
+que contra un servidor de verdad estaba sin medir.
 
-**Tampoco es el motor nativo de lenguaje del upstream.** `src/sqlLanguage/` trae un motor propio en
-TypeScript cuyo comparador (`core/fuzzy.ts`) ya dobla a minúsculas antes de comparar, y cuya búsqueda
-por prefijo va contra un índice de nombres doblados (`services/metadata/catalogModel.ts`). Pero ese
-motor **no está enchufado**: `LanguageFeatureRouter` solo lo usa bajo la preferencia
-`nativeTypeScript`, y nadie construye ni el router ni el motor fuera de sus tests. Se puede comprobar:
+### 28.2. El entorno de medida
+
+Lo que faltaba para medir, montado entero aquí:
 
 ```bash
-git grep -n "LanguageFeatureRouter\|NativeSqlLanguageEngine" -- extensions/mssql/src | grep -v /test/
+docker run -d --name mssql-dshb -e ACCEPT_EULA=Y -e MSSQL_SA_PASSWORD='<contraseña>' \
+  -e MSSQL_PID=Developer -p 1433:1433 mcr.microsoft.com/mssql/server:2022-latest
 ```
 
-Lo que responde hoy es el **SQL Tools Service**, el binario que se descarga (§5), por LSP. Y ese
-filtra por el texto ya escrito **antes** de responder. No es código de este repositorio, así que su
-filtro no se puede arreglar. Lo que sí se puede es no dejar que filtre.
+Base `SqlWorksPrueba`, **colación `SQL_Latin1_General_CP1_CI_AS`** —insensible a mayúsculas, para que
+la colación no sea la explicación— con `dbo.DSHB_Navigation`, `dbo.DSHB_Widget`, una vista, un
+procedimiento y una función con el mismo prefijo. Y luego **3.000 tablas más**, con nombres en
+minúsculas, mayúsculas y mixtos, porque un catálogo de juguete no descarta un truncado.
 
-### 28.2. La idea: preguntar también donde no hay nada que filtrar
+El binario del STS es el mismo artefacto que la extensión se baja sola (la URL está en
+`src/configurations/config.ts`). La sonda es
+`extensions/mssql/test/harness/stsCompletionProbe.mjs`, ahora en el repositorio: es el arnés nº 2 del
+§13.1, que hasta ahora se mencionaba sin estar.
 
-Una petición de autocompletado en el **inicio** de la palabra no lleva texto por el que filtrar: el
-STS devuelve entonces todo lo que cabe en ese punto. Es exactamente la lista que sale hoy al pulsar
-Ctrl+Espacio sobre un hueco, así que no es una carga nueva ni un camino nuevo del servidor.
+### 28.3. Lo que dijo el servidor
 
-Por cada petición del editor se hacen dos, **en paralelo**:
+Con 3.119 sugerencias en juego y el mismo documento en los cinco casos:
 
-1. La que pedía el editor, en el cursor. Manda: contexto exacto y rangos ya puestos.
-2. Otra en el inicio de la palabra, sin filtrar.
+| Escrito                     | Sugerencias | ¿Está `DSHB_Navigation`? | Rango del `textEdit` |
+| --------------------------- | ----------- | ------------------------ | -------------------- |
+| `DSHB` (mayúsculas)         | 3119        | **SÍ**                   | 14→18                |
+| `dshb` (minúsculas)         | 3119        | **SÍ**                   | 14→18                |
+| `navigation`                | 3119        | **SÍ**                   | 14→24                |
+| nada (Ctrl+Espacio)         | 3119        | **SÍ**                   | 14→14                |
+| `dshb`, cursor en el inicio | 3119        | **SÍ**                   | 14→18                |
 
-Y se fusionan: lo de (1) entero y sin tocar, más lo de (2) que no estuviera ya. El filtrado final lo
-hace VS Code, que es el que no distingue mayúsculas.
+**El STS no filtra nada.** Devuelve la misma lista escribas lo que escribas, y la tabla está siempre.
+La hipótesis del §28.1 es falsa, y con ella el cambio entero: la segunda petición traía exactamente
+lo mismo que la primera, así que la fusión no añadía una sola sugerencia. Sobraba una petición por
+pulsación a cambio de nada.
 
-**Es aditivo, y eso es lo que lo hace barato de equivocarse.** Si (2) falla, se cancela, llega vacía
-o no aporta nada nuevo, se devuelve la respuesta de (1) tal cual —el mismo objeto, ni siquiera
-envuelto en otro— y queda exactamente lo que hay hoy.
+De paso cae el otro motivo que tenía el cambio: el `textEdit` **ya viene anclado a la palabra
+escrita** (14→18, no un rango vacío en el cursor), incluso preguntando en el inicio de la palabra. No
+había ningún rango que arreglar.
 
-### 28.3. Lo único que se le cambia a una sugerencia ajena: el rango
+### 28.4. Lo que dijo el editor
 
-El STS ancla cada sugerencia donde se le preguntó. Las de (2) vienen ancladas al inicio de la palabra
-con un rango vacío, así que aceptarlas **pegaría el nombre delante de lo escrito**:
-`dshb` + `DSHB_Navigation` = `dshbDSHB_Navigation`. Sería un fallo bastante peor que el que se venía
-a arreglar.
+El filtro del widget de sugerencias es `fuzzyScoreGracefulAggressive` con
+`FuzzyScoreOptions.default`. Está en `monaco-editor`, que ya está en `node_modules`, así que se puede
+ejecutar con los mismos parámetros que usa `CompletionModel`:
 
-`anchorToTypedWord` les pone el rango de lo escrito, con dos partes: se inserta desde el inicio de la
-palabra hasta el cursor y se reemplaza hasta el final de ella, para que con el cursor en medio de
-`DSHB_Nav|igation` no quede `…igation` colgando detrás.
+| Escrito      | `DSHB_Navigation` | `vDSHB_NavigationWidgets` | `NavigationId` |
+| ------------ | ----------------- | ------------------------- | -------------- |
+| `DSHB`       | sí (23)           | sí (1)                    | no             |
+| `dshb`       | **sí (15)**       | sí (−1)                   | no             |
+| `navigation` | **sí (10)**       | sí (9)                    | sí (72)        |
+| `nav`        | sí (−4)           | sí (−5)                   | sí (16)        |
 
-Y hay una segunda puerta por la que ese rango se podía volver a perder: **resolver** la sugerencia.
-VS Code fusiona lo que devuelve `resolveCompletionItem` sobre la ya mostrada con un `Object.assign`,
-o sea que **todas** sus propiedades ganan, el rango incluido; y el STS devuelve en la resolución la
-sugerencia entera, no solo la documentación que se le pide. Por eso el fork añade también un
-`resolveCompletionItem` que reimpone el rango con el que se mostró.
+Encaja las minúsculas y encaja por el medio del nombre. Las mayúsculas solo suben la **puntuación**
+—23 frente a 15—, que cambia el orden, no la visibilidad.
 
-### 28.4. Por qué no se recorta aquí lo que devuelve la segunda petición
+### 28.5. Qué queda en pie
 
-Sería lo primero que uno haría —filtrar por lo escrito antes de fusionar, para no mover listas
-grandes— y sale peor.
+Ni el servidor esconde la tabla ni el editor la descarta. **En este stack, escribir `dshb` propone
+`DSHB_Navigation`.** Lo que el usuario ve no está explicado por ninguna de las dos piezas, así que el
+cambio se retira entero y el problema sigue abierto, pero mucho más acotado:
 
-Si el STS marca la lista como completa (`isIncomplete: false`), VS Code **se la queda en caché** y
-filtra en local el resto de las teclas: la segunda petición se hace una vez por sesión de sugerencias,
-no una por pulsación. Recortar aquí rompe esa caché de dos maneras: al borrar una letra faltarían
-candidatos que ya no se volverían a pedir, y para evitarlo habría que marcar la lista como incompleta,
-que es justo pedir de nuevo en cada tecla.
+- Si la tabla **aparece pero muy abajo** en la lista, es lo de §28.4: la diferencia de puntuación
+  entre 15 y 23 con miles de candidatos. Eso no se arregla filtrando, se arregla ordenando, y es un
+  cambio distinto (y pequeño): darle a las sugerencias un `sortText` propio, que el STS deja a
+  `null`.
+- Si la lista sale **vacía o sin objetos**, no es un problema de comparación de texto sino de la
+  caché de IntelliSense del STS contra esa base concreta —permisos, tamaño, o que no ha terminado de
+  montarse—, y lo que hay que mirar es otro sitio.
 
-Entre transferir el catálogo una vez o hacer que el analizador del STS lo recorra en cada pulsación,
-sale más barato lo primero. Y de paso la lista responde al instante mientras se escribe.
+Lo que hace falta para decidir entre las dos es información de la máquina del usuario, no más
+conjeturas desde aquí. Está anotado en §28.7.
 
-### 28.5. El ajuste
+### 28.6. Dos formas de medir mal, las dos vividas
 
-`sqlworks.intelliSense.flexibleMatching`, booleano, `true` de fábrica, ámbito `resource`. Apagarlo
-devuelve el comportamiento del STS sin tocar: una sola petición, en el cursor.
+Van en la cabecera de la sonda y aquí, porque las dos producían resultados creíbles:
 
-### 28.6. Verificación
+1. **Mandar el documento entero en `textDocument/didChange`.** El STS declara
+   `textDocumentSync: 2` (incremental) y no aplicaba esos cambios: el documento que tenía seguía
+   siendo el del `didOpen`. Las respuestas salían idénticas en los seis casos, que era **justo lo que
+   se quería demostrar**. Una medición equivocada que confirma la hipótesis es la peor clase de
+   medición, y estuvo a punto de pasar por hallazgo.
+2. **Un documento y una conexión por caso.** Medía bien, pero a partir del quinto el STS dejaba de
+   mandar `intelliSenseReady` y la sonda se colgaba, porque cada caso dejaba una conexión viva.
 
-| Qué                                             | Estado                              |
-| ----------------------------------------------- | ----------------------------------- |
-| Unitarios nuevos (`completionMatching.test.ts`) | ✅ 23 pasan, contra el VS Code real |
-| Suite completa de unitarios                     | ✅ sin regresiones                  |
-| `lint` y typecheck de la extensión              | ✅                                  |
+La sonda hace ahora lo que hace VS Code —una conexión, un documento, cambios incrementales con su
+rango— y **se autocomprueba**: si el rango del `textEdit` no varía entre casos, los cambios no se
+están aplicando, lo dice y sale con error en lugar de imprimir una tabla redonda que no mide nada.
 
-Los 23 fijan el mecanismo: que se pregunte **también** en el inicio de la palabra y solo cuando hay
-algo escrito; que lo que solo traiga la segunda respuesta llegue anclado a lo escrito, con el
-reemplazo hasta el final del nombre; que un `textEdit` en desuso no pueda ganarle a ese rango; que no
-se ofrezca dos veces lo mismo; que un fallo o una cancelación de la segunda petición deje lo de hoy; y
-que un fallo de la **primera** siga siendo un fallo, porque tapar un error del STS sería peor que el
-error.
+### 28.7. Lo que hace falta para cerrarlo
 
-> **Qué está medido y qué es diagnóstico.** Los tests miden el mecanismo del fork, no el servidor: en
-> este entorno no hay un SQL Server contra el que pedirle sugerencias al STS. Que el filtro que
-> esconde `DSHB_Navigation` sea el suyo es un diagnóstico por descarte —el comparador de VS Code y el
-> del motor nativo están leídos, y el segundo ni siquiera está enchufado (§28.1)—, no una medida. Es
-> el motivo de que el cambio se haya escrito aditivo: si el diagnóstico fuera erróneo y el STS no
-> filtrara, la segunda petición no aportaría nada nuevo, la fusión devolvería la respuesta original
-> tal cual y no habría ni regresión ni coste más allá de una petición de más. Confirmarlo contra una
-> base de verdad es un paso de prueba manual, con `DSHB_Navigation` y escribiendo `dshb`.
+Con `DSHB_Navigation` en su base, escribiendo `SELECT * FROM dshb`:
 
-Coste en deuda de merge: **1 línea de producto del upstream sustituida** —la llamada a `next(...)`
-dentro del `middleware.provideCompletionItem` que ya existía en `serviceclient.ts`—, más el `import`
-y la línea de `resolveCompletionItem`. Todo lo demás vive en `src/custom/intellisense/`.
+1. ¿Sale la lista de sugerencias, aunque sea sin la tabla? ¿Cuántas entradas trae?
+2. Si se baja por la lista hasta el final, ¿está `DSHB_Navigation` en alguna parte?
+3. Lo mismo pulsando **Ctrl+Espacio** sobre el hueco, sin escribir nada: ¿aparece?
+4. `Ayuda → Alternar herramientas de desarrollo`, o el canal de salida «MSSQL», por si el
+   `Completion count=` del middleware de `serviceclient.ts` ya dice que llegan cero.
 
-### 28.7. Lo que esto deliberadamente no hace
+La 3 es la que más separa: si con Ctrl+Espacio tampoco aparece, el problema es la caché del STS
+contra esa base y no tiene nada que ver con mayúsculas.
 
-- **No enchufa el motor nativo de lenguaje del upstream.** Está a medias y es suyo; encenderlo sería
-  cambiar de motor de IntelliSense entero, no arreglar un filtro. Cuando el upstream lo promocione,
-  este middleware sobra y se quita.
-- **No escribe un comparador propio.** El que decide qué se ve es el de VS Code; el fork solo se
-  ocupa de que la lista le llegue completa. Un comparador nuestro encima sería una segunda opinión
-  sobre lo mismo.
-- **No toca la caché de IntelliSense del STS** ni el comando `mssql.rebuildIntelliSenseCache`.
+### 28.8. Lo que esto deliberadamente no hace
+
+- **No deja el middleware «por si acaso».** No arreglaba nada medible y costaba una petición por
+  pulsación. Un cambio que no se puede justificar con una medida no se queda.
+- **No toca el `sortText`** todavía. Es la hipótesis viva del §28.5, pero antes de escribirla hay que
+  saber si la tabla aparece o no aparece.
