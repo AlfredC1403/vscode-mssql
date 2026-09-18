@@ -14,7 +14,7 @@ import { FormatOption, FormatOptionKind } from "../sharedInterfaces/formatProfil
  * mejor que cualquiera que escribiéramos nosotros.
  *
  * Una lista propia tendría que mantenerse a mano, y el formateador del upstream **se mueve**: las
- * 56 opciones entraron de golpe en dos commits de hace unos días (§8). Cada opción nueva sería una
+ * 55 opciones entraron de golpe en dos commits de hace unos días (§8). Cada opción nueva sería una
  * línea que hay que recordar añadir, y cada renombrado un fallo silencioso. Leyendo el `package.json`
  * en tiempo de ejecución, una opción nueva aparece en el panel sola, con su tipo y su descripción.
  *
@@ -172,7 +172,7 @@ export function groupOf(name: string): string {
 /**
  * Los valores que se desvían de lo que declara el upstream.
  *
- * Un perfil guarda **solo las desviaciones**, no las 56 opciones. Así un perfil se lee de un vistazo
+ * Un perfil guarda **solo las desviaciones**, no las 55 opciones. Así un perfil se lee de un vistazo
  * («este pone las comas al inicio y nada más»), un `git diff` de `settings.json` dice algo, y una
  * opción nueva del upstream no queda congelada con su valor de hoy en todos los perfiles guardados.
  * Función pura.

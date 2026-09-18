@@ -31,7 +31,7 @@ import { WebviewStrings as Loc } from "../strings";
  * Tres zonas: los perfiles arriba, las opciones a la izquierda y la vista previa a la derecha.
  *
  * La vista previa es **lado a lado**: el mismo SQL formateado con lo que está aplicado y con lo que
- * hay en el panel sin aplicar. Con 56 opciones, muchas de ellas oscuras (`asKeywordOnOwnLine`,
+ * hay en el panel sin aplicar. Con 55 opciones, muchas de ellas oscuras (`asKeywordOnOwnLine`,
  * `clauseBodyAlignment`), ver el efecto es la diferencia entre un panel útil y una lista de 56
  * casillas. Nada se escribe en los ajustes hasta pulsar «Aplicar».
  */

@@ -15,7 +15,7 @@ import { Strings } from "../strings";
  *
  * El brief pedía un perfil XML. **No se hace**, y la razón es medida, no de gusto:
  *
- * 1. El esquema de las 56 opciones ya está en el `package.json` del upstream, con tipos, valores y
+ * 1. El esquema de las 55 opciones ya está en el `package.json` del upstream, con tipos, valores y
  *    descripciones. Un XML sería una segunda descripción de lo mismo, escrita a mano, que se queda
  *    desfasada cada vez que el upstream añade una opción — y acaba de añadir 56 de golpe.
  * 2. Un XML sería una **capa sobre `settings.json`**, no la fuente de verdad, porque el formateador

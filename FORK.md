@@ -14,8 +14,13 @@ Este archivo cumple dos funciones:
 | Upstream                         | `https://github.com/microsoft/vscode-mssql.git` (remoto `upstream`) |
 | Origen del fork                  | `https://github.com/AlfredC1403/vscode-mssql` (remoto `origin`)     |
 | Commit base de este inventario   | `752692d`                                                           |
-| Versión de la extensión upstream | `1.46.0`                                                            |
+| **Último merge con el upstream** | **`f9e632ea`, traído en M9 el 2026-09-18** (§26)                    |
+| Versión de la extensión upstream | `1.46.0` (sin cambio en el merge de M9)                             |
 | Fecha del inventario             | 2026-09-17                                                          |
+
+> **El inventario sigue anclado a `752692d`, a propósito.** Describe el terreno sobre el que se
+> construyó el fork, y reescribirlo en cada merge perdería esa foto. Lo que el merge de M9 dejó
+> desfasado está corregido en el sitio, y lo que el upstream añadió está en §26.3.
 
 ---
 
@@ -41,7 +46,7 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/src/databaseProjects/common/extensionIds.ts`  | **1 línea**: `mssqlExtensionId`                                                                                                                                                                                                                        | Ídem, segunda copia del mismo identificador                                                                                                                    | M1   |
 | `extensions/mssql/src/databaseProjects/tools/buildHelper.ts`    | **1 línea**: identificador en línea                                                                                                                                                                                                                    | Ídem, tercera copia                                                                                                                                            | M1   |
 | `extensions/mssql/src/integration/azureResourcesIntegration.ts` | **1 línea**: autoridad del URI `vscode://…/connect`                                                                                                                                                                                                    | VS Code enruta `vscode://<publisher>.<name>/…` al gestor de URI de la extensión                                                                                | M1   |
-| `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo                                                                                                                                                                                                | Quedaban desactualizadas tras el cambio anterior                                                                                                               | M1   |
+| `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo, **más su marcador `// [FORK]` (añadido en M9)**                                                                                                                                               | Quedaban desactualizadas tras el cambio anterior. Era el único archivo de esta tabla sin marcador, así que `git grep "\[FORK\]"` no lo veía (§26.5)            | M1   |
 | `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                       | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
 
 | `extensions/mssql/package.json` | **M2**: comando `sqlworks.openAdminPanel` y su entrada en `view/item/context` | Anclaje nº1 del brief: así el panel se lanza desde el árbol sin tocar el explorador de objetos | M2 |
@@ -52,7 +57,8 @@ git grep -n "\[FORK\]"
 | `extensions/mssql/tsconfig.webviews.json` | **M3, 1 línea**: incluye además `src/custom/admin/sql/types.ts` | Los tipos del dominio los fija el §9 del brief en esa ruta y el panel los pinta tal cual. No importan nada, así que compilan en los dos lados sin duplicarlos | M3 |
 | `extensions/mssql/package.json` | **M5**: el ajuste `sqlworks.productionServers` en `contributes.configuration.properties`, con `scope: "application"` | Regla 11.4 del brief. Un ajuste solo existe si está declarado aquí; el `scope` impide que el `settings.json` de un repositorio desmarque un servidor de producción (§22.7). Es el **único** archivo del upstream que M5 toca | M5 |
 | `extensions/mssql/package.json` | **M7**: la vista `sqlworksSnippets` (`type: "webview"`) dentro del contenedor `objectExplorer` que ya existe, el comando `sqlworks.showSnippets` y el ajuste `sqlworks.snippets.sharedLibraries` | Punto 12 del brief. Una vista y un comando solo existen si están declarados aquí. Va en el contenedor del upstream en lugar de crear otro, que sería una segunda barra para lo mismo. Es el **único** archivo del upstream que M7 toca | M7 |
-| `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 56 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
+| `extensions/mssql/package.json` | **M8**: los comandos `sqlworks.openFormatPanel` y `sqlworks.applyFormatProfile`, y el ajuste `sqlworks.format.profiles` | El fork **no sustituye** el formateador: lo configura escribiendo `mssql.format.options.*` (§25.1). No se toca ninguna de las 55 declaraciones del upstream; el panel las **lee** en tiempo de ejecución. Es el **único** archivo del upstream que M8 toca | M8 |
+| `extensions/mssql/package.json` | **M9, 1 línea**: `"visibility": "collapsed"` en nuestra vista `sqlworksSnippets` | Visible por omisión materializaba un segundo `iframe.webview` y rompía dos e2e del upstream, y con ellos los puntos 1 y 7 de la lista de paridad (§26.4). Se arregla en **nuestra** contribución, no en el arnés del upstream | M9 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -64,20 +70,39 @@ M1 y M2.
 Todos por la misma razón: fijaban el identificador de la extensión o el título del contenedor de
 vistas como literal. Detalle y síntomas en §15.6 y §15.7.
 
-| Archivo                                                              | Qué se cambió                                                      | Hito |
-| -------------------------------------------------------------------- | ------------------------------------------------------------------ | ---- |
-| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **1 línea**: selector de la pestaña de la barra de actividad       | M1   |
-| `extensions/mssql/test/e2e/utils/testHelpers.ts`                     | **1 línea**: el mismo selector                                     | M1   |
-| `extensions/mssql/test/unit/databaseProjects/testUtils.ts`           | **2 líneas**: usa la constante en vez del literal, más su `import` | M1   |
-| `extensions/mssql/test/unit/databaseProjects/testContext.ts`         | **2 líneas**: ídem                                                 | M1   |
-| `extensions/mssql/test/unit/databaseProjects/baselines/baselines.ts` | **2 líneas**: ídem                                                 | M1   |
-| `extensions/mssql/test/unit/databaseProjects/buildHelper.test.ts`    | **3 líneas**: ídem, dos usos                                       | M1   |
-| `extensions/mssql/test/unit/azureResourcesIntegration.test.ts`       | **2 líneas**: la aserción de la autoridad del URI, más su `import` | M1   |
+| Archivo                                                              | Qué se cambió                                                                                                                                      | Hito |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **1 línea**: selector de la pestaña de la barra de actividad                                                                                       | M1   |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **4 líneas de lógica**: espera a que el árbol de conexiones exista, en lugar del nodo «Add Connection» que solo aparece con el árbol vacío (§17.4) | M0   |
+| `extensions/mssql/test/e2e/utils/testHelpers.ts`                     | **1 línea**: el mismo selector                                                                                                                     | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testUtils.ts`           | **2 líneas**: usa la constante en vez del literal, más su `import`                                                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testContext.ts`         | **2 líneas**: ídem                                                                                                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/baselines/baselines.ts` | **2 líneas**: ídem                                                                                                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/buildHelper.test.ts`    | **3 líneas**: ídem, dos usos                                                                                                                       | M1   |
+| `extensions/mssql/test/unit/azureResourcesIntegration.test.ts`       | **2 líneas**: la aserción de la autoridad del URI, más su `import`                                                                                 | M1   |
 
-**Coste real de merge: nueve líneas de código de producto** repartidas en seis archivos, ninguna
-con lógica, más **trece líneas de infraestructura de test** en siete archivos. El resto son
-identidad, recursos binarios y un README, donde un conflicto se resuelve siempre quedándose con
-el nuestro.
+**Coste real de merge, medido.** La cifra que importa es cuántas líneas **del upstream** hemos
+sustituido, porque son las únicas que pueden entrar en conflicto; las que añadimos encima (casi
+todas comentarios que explican el porqué) no chocan con nada:
+
+```bash
+# Sustituidas / añadidas, archivo a archivo
+git diff --numstat 752692d77..HEAD -- extensions/mssql/src extensions/mssql/test
+```
+
+| Categoría                       | Archivos | Líneas del upstream sustituidas | Líneas nuestras añadidas |
+| ------------------------------- | -------- | ------------------------------- | ------------------------ |
+| Código de producto              | 6        | **8**                           | 22                       |
+| Infraestructura de test y arnés | 7        | **13**                          | 29                       |
+
+De las 8 de producto, **ninguna tiene lógica**: son el identificador de la extensión en cuatro
+copias, la autoridad de un URI, dos líneas de ejemplo en un comentario y la llamada a
+`disableTelemetry()`. El resto de la tabla de arriba son identidad, recursos binarios y un README,
+donde un conflicto se resuelve siempre quedándose con el nuestro.
+
+> **Corregido en M9.** Antes aquí ponía «nueve líneas de producto» y «trece de test», sin decir qué
+> se estaba contando. Trece era correcto y nueve no; ahora está medido, con el comando al lado, y
+> separando lo sustituido de lo añadido, que es la distinción que de verdad predice un conflicto.
 
 En los archivos de test el cambio es además a prueba de futuro: pasan a leer el identificador de
 la constante, así que un renombrado posterior no los vuelve a romper.
@@ -92,13 +117,14 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                       | Para qué                                                   |
-| ------------------------------------------------------------- | ---------------------------------------------------------- |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                        |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio |
-| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)              |
-| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft           |
-| `FORK.md`                                                     | Este archivo                                               |
+| Archivo                                                       | Para qué                                                                                                                                                                                                                                                     |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `FORK.md`                                                     | Este archivo                                                                                                                                                                                                                                                 |
 
 ---
 
@@ -130,8 +156,20 @@ cambia todas las rutas.
 └── ThirdPartyNotices.txt         se conserva intacto
 ```
 
-`extensions/mssql/src/` tiene **971 archivos `.ts`/`.tsx`** repartidos en 53 carpetas de primer
-nivel. No es un proyecto pequeño.
+`extensions/mssql/src/` tenía, en la base de este inventario (`752692d`), **971 archivos
+`.ts`/`.tsx`** repartidos en **51 carpetas** de primer nivel. No es un proyecto pequeño.
+
+Tras el merge de M9 son **988 del upstream**, y **1069 en total** contando `src/custom/`, en 52
+carpetas (la 52.ª es `custom/`, la nuestra). El upstream no creó ninguna carpeta de primer nivel:
+`src/dab/` ya existía.
+
+```bash
+git ls-tree -r --name-only upstream/main -- extensions/mssql/src | grep -cE '\.tsx?$'
+find extensions/mssql/src -maxdepth 1 -type d | tail -n +2 | wc -l
+```
+
+> **Corregido en M9:** aquí ponía «53 carpetas», y eran 51 ya entonces. El 971 sí era correcto para
+> la base, y se conserva como tal porque el inventario describe ese punto.
 
 ### 1.1. El `package.json` de la extensión
 
@@ -353,13 +391,32 @@ v2.0.35), que se instala aparte y solo se empaqueta con `--package-mcp`.
 
 ## 6. Telemetría
 
-Tres emisores, y un punto de estrangulamiento muy limpio.
+Tres emisores. **Dos** comparten un punto de estrangulamiento muy limpio; el tercero no, y eso
+estuvo mal escrito aquí hasta M9.
 
 | Vía                     | Dónde                                                                                        | Cómo se corta                            |
 | ----------------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------- |
 | Eventos de la extensión | `extension-toolkit/vscode/telemetry/` (`sendActionEvent`, `sendErrorEvent`, `startActivity`) | `initializeTelemetryReporter(undefined)` |
-| Eventos del STS         | notificación `telemetry/sqlevent` → `serviceclient.ts:551` los reenvía                       | quitar el handler                        |
-| Perf                    | `src/perf/perfTelemetry.ts` (`Perf.marker`, `Perf.flush`)                                    | pasa por el mismo reporter               |
+| Eventos del STS         | notificación `telemetry/sqlevent` → `serviceclient.ts:551` los reenvía                       | el mismo reporter                        |
+| Perf                    | `src/perf/perfTelemetry.ts` (`Perf.marker`, `Perf.flush`)                                    | **no pasa por el reporter**: ver abajo   |
+
+> **Corregido en M9 (§26.6).** Esta tabla decía que `Perf` «pasa por el mismo reporter». Es falso:
+> `Perf.marker` acaba en `diag.emit` (`src/diagnostics/diagnosticsCore.ts`) y solo sale del proceso
+> si hay un **sink** registrado. El único del árbol es `PerfModeSink`, que manda por `http.request`
+> (`src/diagnostics/sinks.ts:184`), no por Application Insights. `disableTelemetry()` no lo toca ni
+> puede tocarlo.
+>
+> Lo que de verdad lo contiene es su propia puerta: el sink solo se registra si
+> `PERF_MODE=1` **y** están puestas `PERF_MARKER_URL` y `PERF_CONTROL_TOKEN`
+> (`perfTelemetry.ts:131-145`). Es el arnés local de `tools/perftest`. Se comprueba con:
+>
+> ```bash
+> git grep -n "sendActionEvent\|sendErrorEvent\|startActivity" -- extensions/mssql/src/perf   # vacío
+> git grep -n "addSink" -- extensions/mssql/src                                               # solo perfTelemetry.ts:144
+> ```
+>
+> El error importaba: daba por cortado un camino que nadie estaba cortando. Ahora la invariante real
+> —sin `PERF_MODE` no hay ningún sink— la fija `test/unit/custom/telemetryOverride.test.ts`.
 
 El transporte real es `@vscode/extension-telemetry` 1.5.2, dependencia de
 `packages/extension-toolkit`, construido en `extension.ts:117` con
@@ -412,7 +469,7 @@ Los commits:
 - `ea050a4` — _Expose additional formatter options and bump STS_ (#22925)
 - `7dc5a66` — _Remove legacy SQL formatter settings_ (#22940)
 
-Hoy hay **56 ajustes `mssql.format.options.*`**, servidos por el parser real de T-SQL
+Hoy hay **55 ajustes `mssql.format.options.*`** (56 contando `mssql.format.showParseErrorNotification`), servidos por el parser real de T-SQL
 (ScriptDom) dentro del STS, no por un reformateador de tokens.
 
 ### 8.1. Cómo funciona
@@ -596,6 +653,32 @@ No hay registro de proveedor de formato que sustituir; lo aporta el cliente LSP.
 Coste: un `.vsix` por plataforma y bastante más tamaño. Para distribución interna a máquinas
 Windows conocidas, se genera solo `win-x64`.
 
+> **Matizado en M9, y hay una decisión pendiente.** Las razones 2 y 3 siguen siendo ciertas **del
+> SQL Tools Service**, que es de lo que hablaba esta sección. Pero el merge de M9 trajo una función
+> nueva del upstream (Data API Builder) con **una segunda descarga de red y un segundo consumidor de
+> .NET**, y `--offline` no cubre ninguna de las dos:
+>
+> - `src/dab/dabCliTool.ts` se baja la CLI de Data API Builder (un `.nupkg`) de un feed NuGet
+>   —`https://api.nuget.org/v3-flatcontainer` por omisión, `src/sharedInterfaces/dab.ts`— y ejecuta
+>   lo que desempaqueta con `spawn(..., {detached: true})`, o sea que el proceso sobrevive a cerrar
+>   VS Code. **No hay comprobación de firma ni de hash.**
+> - El feed no es fijo: `src/dab/dabNuGetFeed.ts` recorre los `NuGet.Config` de la carpeta abierta y
+>   de todos sus directorios padre, y gana la primera fuente que conteste. Es decir, **el repositorio
+>   que tengas abierto puede decidir de dónde sale el binario**, y la extensión se declara compatible
+>   con espacios de trabajo no confiables.
+> - `src/dab/dabCliRunner.ts` resuelve el runtime con `DotnetRuntimeProvider`, que pide
+>   `ms-dotnettools.vscode-dotnet-runtime` —la extensión que la razón 3 dice que quitamos— con caída
+>   a un `dotnet` del `PATH`.
+>
+> **Hoy nada de esto se alcanza**, y está medido: el camino cuelga del destino de despliegue «DAB
+> CLI», que solo se pinta si `mssql.schemaDesigner.enableDeploymentsView` está activo, y
+> `isDeploymentsViewEnabled()` hace `!!get<boolean>(...)` sobre un ajuste **que el upstream no
+> declara en su `package.json`**. Sin declarar, vale `undefined`, y la función queda apagada.
+>
+> Lo incómodo es de dónde viene ese apagado: **es un descuido del upstream, no una decisión
+> nuestra**, y un `settings.json` de repositorio puede encenderlo. La recomendación y las opciones
+> están en §26.8, pendientes de decisión del usuario.
+
 ### 11.5. Recomendación sobre M8 (formateador)
 
 El plan de §13 del brief —añadir `sql-formatter` y sustituir el proveedor— **produciría un
@@ -713,7 +796,7 @@ Dos arneses distintos:
 | #   | Comprobación                                                          | Estado | Evidencia                                                                               |
 | --- | --------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------- |
 | 1   | Conectar con autenticación SQL                                        | ✅     | e2e `connection.spec.ts` + arnés: SQL Server 16.0.4295.3, Developer Edition             |
-| 1b  | Conectar con autenticación integrada                                  | ❌     | **No verificable aquí**: requiere Windows y un dominio Kerberos                         |
+| 1b  | Conectar con autenticación integrada                                  | ❌     | **No verificable aquí**: requiere un dominio Kerberos (KDC, SPN y ticket)               |
 | 2   | Explorador: servidor, base, tablas, vistas, procedimientos, seguridad | ✅     | arnés: árbol completo expandido, incluidas columnas con tipo y PK                       |
 | 3   | IntelliSense sugiere tablas y columnas reales                         | ✅     | arnés: `ventas.` → `Cliente`, `Pedido`, `vPedidoCliente`                                |
 | 4   | Ejecutar consulta: resultados, mensajes, varios conjuntos             | ✅     | arnés: 2 conjuntos + 3 mensajes (`PRINT` y los dos «rows affected»)                     |
@@ -735,12 +818,26 @@ cambios del fork, no solo antes.
 
 Queda un hueco, y es el mismo de siempre:
 
-- **Autenticación integrada (1b)** sigue sin verificar: requiere Windows y un dominio Kerberos, así
-  que es un hueco estructural de este entorno y no un fallo conocido del fork. Es **lo único de la
-  lista de paridad que nadie ha ejercitado todavía**, y conviene no perderlo de vista: el renombrado
-  de M1 cambió el identificador de la extensión en cuatro archivos (§15.6), que es justo el tipo de
-  cambio capaz de romper una ruta de autenticación sin que ningún test de aquí lo note. Hasta que
-  alguien la pruebe en un dominio, la paridad del fork es de ocho sobre nueve, no completa.
+- **Autenticación integrada (1b)** sigue sin verificar: requiere un **dominio Kerberos** —un KDC
+  alcanzable, un SPN registrado para la instancia y un ticket—, así que es un hueco estructural de
+  este entorno y no un fallo conocido del fork. Es **lo único de la lista de paridad que nadie ha
+  ejercitado todavía**, y conviene no perderlo de vista: el renombrado de M1 cambió el identificador
+  de la extensión en cuatro archivos (§15.6), que es justo el tipo de cambio capaz de romper una ruta
+  de autenticación sin que ningún test de aquí lo note. Hasta que alguien la pruebe en un dominio, la
+  paridad del fork es de ocho sobre nueve, no completa.
+
+    > **Corregido en M9.** Antes aquí ponía «requiere Windows». No es exacto, y el propio upstream lo
+    > desmiente: `extensions/mssql/KERBEROS_HELP.md` explica cómo usar autenticación integrada **desde
+    > macOS y Linux** con un ticket de Kerberos. Lo que falta en este entorno es el dominio, no el
+    > sistema operativo. La distinción importa porque cambia quién puede cerrar la fila: no hace falta
+    > una máquina Windows, hace falta acceso a un dominio.
+    >
+    > Y el merge de M9 tocó justo esta ruta: el upstream reescribió `KERBEROS_HELP.md` (+200 líneas),
+    > añadió un botón «Learn more» al error de Kerberos fuera de Windows y un tooltip en el desplegable
+    > de autenticación **solo visible en macOS y Linux** (`formComponentHelpers.ts:288`, con
+    > `requiresKerberos = process.platform === "darwin" || "linux"`). Para las máquinas Windows a las
+    > que va este fork, ese código es inerte; el resto del cambio es texto de ayuda. No mueve la fila,
+    > pero explica por qué 1b aparece en el diff de M9 (§26.4).
 
 ### 13.3. Toolchain
 
@@ -761,7 +858,7 @@ found; telemetry will not be sent»_.
 
 `test/e2e/utils/testHelpers.ts:37` busca el campo «Database name» del diálogo de conexión como
 `getByRole("textbox", …)`, pero ese campo es un **combobox** desde que
-`src/connectionconfig/formComponentHelpers.ts:299` lo declara `FormItemType.Combobox` con
+`src/connectionconfig/formComponentHelpers.ts:303` lo declara `FormItemType.Combobox` con
 `freeform: true`. La suite falla siempre que `DATABASE_NAME` está puesto en el `.env`.
 
 Hay una segunda causa encadenada: el combobox intenta poblar la lista de bases antes de que el
@@ -846,12 +943,21 @@ el coste.
 Cortada en `src/custom/overrides/telemetry.ts`, con dos líneas en `src/extension.ts`. El
 razonamiento completo está en el comentario de ese archivo; en resumen:
 
-- Los tres emisores del upstream (extensión, relé de `telemetry/sqlevent` del STS, y `Perf`)
+- **Dos** de los tres emisores del upstream (extensión y relé de `telemetry/sqlevent` del STS)
   comparten un único `telemetryReporter` del extension-toolkit. Basta con dejarlo sin transporte.
+  El tercero, `Perf`, **no pasa por ahí**: es un canal aparte con su propia puerta de variables de
+  entorno (§6 y §26.6). Hasta M9 aquí ponía «los tres», que era falso.
+- Cortar en el reporter, y no evento a evento, es lo que hace que el corte **sobreviva a los
+  merges**: los puntos de entrada leen el enlace de módulo en cada llamada. Medido en M9, donde el
+  upstream trajo tres `sendActionEvent` nuevos y quedaron cortados sin tocar nada (§26.6).
 - Se cierran **las dos** vías de entrada de la clave: `package.json` → `aiKey`, y la variable de
   entorno `MSSQL_APP_INSIGHTS_KEY` que el constructor del reporter consulta como respaldo.
-- `test/unit/custom/telemetryOverride.test.ts` lo fija con cuatro tests, para que un merge no lo
-  revierta en silencio.
+- El reporter queda sin transporte porque el constructor de `@vscode/extension-telemetry` **lanza**
+  con `undefined` y el `try/catch` del toolkit se lo traga. El aviso `Error initializing
+TelemetryReporter:` de la consola **es** el corte, no ruido: silenciarlo con una clave de relleno
+  lo reabriría.
+- `test/unit/custom/telemetryOverride.test.ts` lo fija, para que un merge no lo
+  revierta en silencio, e incluye la invariante de `Perf` (sin `PERF_MODE`, ningún sink).
 - `scripts/package-fork.js` aborta el empaquetado si `package.json` declara `aiKey`.
 
 El único `http.request` que queda en el árbol es el sink de `src/diagnostics/sinks.ts`, que exige
@@ -1100,7 +1206,7 @@ arregla**: son código del upstream y tocarlos es deuda de merge a cambio de nad
 ### 17.1. El helper e2e busca el campo «Database name» como `textbox`
 
 `test/e2e/utils/testHelpers.ts:37` lo busca con `getByRole("textbox", …)`, pero
-`src/connectionconfig/formComponentHelpers.ts:299` lo declara `FormItemType.Combobox` con
+`src/connectionconfig/formComponentHelpers.ts:303` lo declara `FormItemType.Combobox` con
 `freeform: true`. La suite falla siempre que `DATABASE_NAME` está puesto en el `.env`.
 
 Ver §13.4 para el diagnóstico completo.
@@ -2384,7 +2490,7 @@ oro evita (§8.1).
    estilo** (56 ajustes `mssql.format.*` menos `showParseErrorNotification`, que es una preferencia
    de notificaciones) con su tipo, sus valores posibles, su valor por omisión y su descripción. Un
    XML sería una segunda descripción de lo mismo, escrita a mano.
-2. **Y el upstream se mueve.** Las 56 opciones entraron de golpe en dos commits de hace unos días
+2. **Y el upstream se mueve.** Las 55 opciones entraron de golpe en dos commits de hace unos días
    (§8). Cada opción nueva sería una línea que alguien tiene que acordarse de añadir al XML, y cada
    renombrado un fallo silencioso.
 3. **El XML no podría ser la fuente de verdad**, por la medida de §25.1: el formateador solo lee de
@@ -2521,3 +2627,303 @@ configuración anterior, y que un SQL inválido devuelve un motivo en lugar de l
   pregunta si va a los ajustes del usuario o a los del proyecto.
 - **No añade las ~10 % de opciones del brief que el upstream no tiene** (§8.2): eso sería escribir un
   formateador.
+
+---
+
+## 26. Primer merge con el upstream (M9)
+
+Este hito no añade función ninguna. Existe **para medir si el aislamiento de los §4 y §16 funcionó**,
+y la forma de medirlo es traerse el upstream y ver qué se rompe. El criterio del brief es concreto:
+terminado cuando el merge se resuelve **sin tocar código nuestro**, la lista de paridad pasa, y
+`FORK.md` sigue siendo exacto.
+
+Los tres se cumplen. Los dos primeros salieron mejor de lo esperado; el tercero costó, y es el que
+ha dejado más trabajo hecho.
+
+### 26.1. Lo que se trajo, y el resultado
+
+| Dato                                   | Valor                                                |
+| -------------------------------------- | ---------------------------------------------------- |
+| Base común                             | `752692d7` (donde se separó el fork)                 |
+| Punta del upstream traída              | `f9e632ea`                                           |
+| Commits del upstream                   | 2                                                    |
+| Archivos que tocó                      | 57 (21 nuevos), +9606 / −266                         |
+| Nuestros commits por delante           | 13 (M0 a M8)                                         |
+| Archivos tocados por **los dos** lados | **2**: `package.json` y `src/constants/constants.ts` |
+| **Conflictos**                         | **0**                                                |
+| Archivos de `src/custom/` tocados      | **0**                                                |
+
+Los dos commits son la función **Data API Builder** (despliegues persistentes y un destino de CLI) y
+una **guía de Kerberos** para el diálogo de conexión.
+
+**El merge es determinista, y se comprobó tres veces.** Se resolvió, se deshizo para medir el árbol
+anterior (§26.4) y se rehízo: el hash del árbol resultante fue idéntico las dos veces,
+`c75f492ee16fe58555be2fef09cf29f6e09748b8`. La tercera fue una reconstrucción independiente, en solo
+lectura y sin tocar el repositorio, que dio el mismo hash:
+
+```bash
+git merge-tree --write-tree HEAD upstream/main   # → c75f492e…, sin conflictos
+```
+
+### 26.2. Por qué no hubo ni un conflicto, medido y no supuesto
+
+«Cero conflictos» no basta: git resuelve sin conflicto cuando los cambios caen en líneas distintas, y
+eso puede dejar conviviendo dos cosas incoherentes. La comprobación fuerte es que **el archivo
+mezclado se diferencie del upstream exactamente en lo nuestro, y nada más**:
+
+```bash
+# Lo que el upstream añadió, ¿sigue estando todo?
+git diff 752692d77..upstream/main -- <archivo> | grep '^+' | ...   # 0 líneas perdidas
+# Lo que nos separa del upstream, ¿es solo lo nuestro?
+git diff upstream/main -- extensions/mssql/package.json            # 108 líneas, todas del fork
+git diff upstream/main -- extensions/mssql/src/constants/constants.ts   # 3 líneas, las nuestras
+```
+
+- **`package.json`**: las cuatro tramas del upstream caen dentro del manifiesto de la herramienta
+  `mssql_dab` (quitan `expectedVersion` de su esquema). Lo nuestro vive en la identidad, en
+  `view/item/context`, en cuatro comandos y en tres ajustes. **Cero solape.** El JSON sigue siendo
+  válido y sin claves duplicadas.
+- **`constants.ts`**: el upstream añade una clase `Links` y dos claves de configuración a partir de
+  la línea 233, y borra `integratedAuthHelpLink`. Nuestro `extensionId` está en la línea 10, a más de
+  220 líneas. El borrado no deja nada colgando: `git grep integratedAuthHelpLink` no devuelve nada.
+
+Los otros tres anclajes —`src/extension.ts`, `scripts/bundle-webviews.js` y los dos `tsconfig`— **el
+upstream ni los tocó**. Tampoco `eslint.config.mjs`.
+
+**Éste es el resultado que el hito buscaba.** El upstream metió 9606 líneas, una carpeta entera de
+servicios y 10 componentes nuevos de webview, y el coste de integración del fork fue **leer dos
+diffs**. La regla de oro del §4 —todo en `src/custom/`— es lo que lo compró.
+
+### 26.3. Lo que el upstream añadió, y por qué no nos obliga a nada
+
+| Qué                                        | ¿Nos afecta?                                                            |
+| ------------------------------------------ | ----------------------------------------------------------------------- |
+| 6 archivos en `src/dab/` (CLI, feed NuGet) | No, salvo la decisión pendiente de §26.8                                |
+| 10 componentes en `SchemaDesigner/dab/…`   | No: cuelgan de `dabPage.tsx`, que ya entra por el entry point existente |
+| 3 acciones nuevas de telemetría            | No: quedan cortadas solas (§26.6)                                       |
+| ~350 tests nuevos                          | No: pasan tal cual                                                      |
+| Guía de Kerberos y tooltip                 | Inerte en Windows, que es a donde va este fork (§13.2)                  |
+
+**No hace falta un quinto anclaje.** Comprobado, no supuesto: ningún archivo nuevo es un
+`pages/*/index.tsx` (así que no hay entry point de esbuild que añadir), ninguno importa desde rutas
+que obliguen a tocar los `tsconfig`, y ninguno codifica el identificador de la extensión.
+
+**La versión del SQL Tools Service no se movió**: sigue pineada en `6.0.20260915.1`
+(`src/configurations/config.ts`), archivo que el merge no toca. Por construcción, entonces, todo lo
+que el fork habla con el motor —M3 a M6— no puede haber cambiado de contrato.
+
+### 26.4. La lista de paridad, y la regresión que encontró
+
+§13 dice que la lista se corre «después de cada merge». Se corrió, y **encontró un fallo de verdad**.
+
+Los puntos 1 y 7 se apoyan en dos especificaciones e2e del upstream (`connection.spec.ts` y
+`executionPlan.spec.ts`). Sobre el árbol mezclado, **2 de sus 13 tests fallaban**:
+
+```
+Error: locator.fill: strict mode violation: locator('.webview') resolved to 2 elements
+```
+
+La tentación era anotarlo como daño del merge. **No lo era**, y se midió: se deshizo el merge, se
+reconstruyó el árbol de M8 y se volvieron a correr los dos specs. Fallaban **exactamente igual**.
+
+La causa es nuestra, y es de M7: la vista `sqlworksSnippets` salía **visible por omisión**, así que
+en cuanto se abre la barra lateral del explorador de objetos materializa un segundo `iframe.webview`.
+El arnés del upstream (`test/e2e/utils/testHelpers.ts:98`) localiza los webviews con un
+`frameLocator(".webview")` sin cualificar, y con dos deja de ser unívoco.
+
+Se nos escapó porque **después de M7 solo se corrían los tres specs del fork**, que ya usan
+`findSqlworksWebview` y no se enteran. La lista de paridad es lo que lo destapó, que es justo para lo
+que está.
+
+**El arreglo son dos palabras** en nuestra propia contribución del `package.json`:
+
+```json
+{ "id": "sqlworksSnippets", "type": "webview", "visibility": "collapsed" }
+```
+
+Se arregla en nuestro lado, no en el arnés del upstream: una vista del fork no tiene por qué abrirse
+sola en la barra lateral de todo el mundo, y `resolveWebviewView` ya carga en diferido (§24.3), así
+que colapsada no cuesta nada. Resultado: **13 de 13 del upstream** y **3 de 3 del fork**.
+
+| #   | Comprobación                                                       | Tras el merge | Evidencia                                 |
+| --- | ------------------------------------------------------------------ | ------------- | ----------------------------------------- |
+| 1   | Autenticación SQL                                                  | ✅            | `connection.spec.ts`, 1/1                 |
+| 1b  | Autenticación integrada                                            | ❌            | Sigue sin dominio Kerberos (§13.2)        |
+| 2–6 | Explorador, IntelliSense, consultas, exportación, Script as Create | ✅            | arnés JSON-RPC contra el STS, 6/6         |
+| 7   | Plan de ejecución estimado                                         | ✅            | `executionPlan.spec.ts`, 12/12            |
+| 8   | Historial de consultas                                             | ✅            | Cerrado por el usuario en Windows (§13.2) |
+
+### 26.5. `FORK.md` no era exacto, y ése era el hallazgo
+
+El tercer criterio del hito resultó ser el más caro. Se auditó el documento entero contra el árbol
+mezclado y **salieron nueve cosas falsas o incompletas**.
+
+Solo **una** la causó el merge (el ancla de línea desplazada). Las otras ocho ya eran falsas antes, y
+el merge se limitó a **destaparlas**: eso es la otra mitad de para qué sirve este hito. Un documento
+de deuda de merge solo se comprueba cuando hay un merge.
+
+| Qué decía                                        | Qué pasa de verdad                                                         |
+| ------------------------------------------------ | -------------------------------------------------------------------------- |
+| «971 archivos en **53 carpetas**»                | Eran **51** ya en la base; hoy 988 del upstream y 1069 con `src/custom/`   |
+| «**56** ajustes `mssql.format.options.*`»        | **55** con ese prefijo; 56 contando `showParseErrorNotification`           |
+| «**nueve** líneas de producto»                   | **8** líneas del upstream sustituidas; ahora medido y con el comando       |
+| `formComponentHelpers.ts:299` (en dos sitios)    | El merge la desplazó a la **303**                                          |
+| Fila de `launchVscodeWithMsSqlExt.ts`: «1 línea» | Son dos cambios; el segundo tiene **lógica** y no estaba en §0             |
+| 1b: «requiere **Windows**»                       | Requiere un **dominio Kerberos**; el propio upstream documenta Linux       |
+| `mssqlProtocolHandler.ts`                        | Estaba en §0 **sin marcador `// [FORK]`**: el grep de auditoría no lo veía |
+| Tabla de archivos nuevos                         | Faltaba `images/sqlworksIcon.png`, que es a donde apunta el manifiesto     |
+| «`Perf` pasa por el mismo reporter»              | **Falso**, y era la peor de las nueve: ver §26.6                           |
+
+Todas corregidas en el sitio, con la medida al lado. Los marcadores `// [FORK]` **en código** pasan
+de **21 en 16 archivos** a **22 en 17** (el que faltaba en `mssqlProtocolHandler.ts`):
+
+```bash
+# Los marcadores de verdad, sin contar las veces que esta documentación los menciona
+git grep -n "\[FORK\]" -- . ':!FORK.md' ':!NOTICE.md'
+```
+
+**Lo que esto enseña sobre el propio método.** La disciplina del §0 —una fila por archivo, un
+marcador por línea— funciona, pero solo se comprueba a sí misma cuando alguien la audita. Un archivo
+sin marcador es invisible para `git grep "\[FORK\]"`, que es _el_ comando que §0 prescribe: el fork
+se estaba auditando con una herramienta que no veía uno de sus propios cambios. Y una cifra de
+inventario sin el comando que la produjo no se puede re-verificar, así que envejece sin que nadie se
+entere. Las cifras nuevas de este documento van con su comando al lado.
+
+### 26.6. El corte de telemetría aguantó, pero por una razón distinta de la escrita
+
+**La buena noticia, medida:** el upstream trajo 9606 líneas y **tres `sendActionEvent` nuevos**, y
+quedaron cortados **sin tocar una línea del fork**. Es el resultado de haber cortado en el
+_reporter_ y no evento a evento: los puntos de entrada leen el enlace de módulo en cada llamada, así
+que da igual cuántos emisores añada el upstream. Los webviews tampoco abren una vía nueva: su
+telemetría desemboca en el mismo sitio a través de `webviewBaseController.ts`.
+
+**La mala:** `FORK.md` decía, en dos sitios, que los **tres** emisores del upstream comparten ese
+reporter, y que por tanto `disableTelemetry()` cortaba también `Perf`. **Es falso.** `Perf.marker`
+acaba en `diag.emit`, y de ahí solo sale si hay un **sink** registrado; el único del árbol manda por
+`http.request`, no por Application Insights:
+
+```bash
+git grep -n "sendActionEvent\|sendErrorEvent\|startActivity" -- extensions/mssql/src/perf   # vacío
+git grep -n "addSink" -- extensions/mssql/src                          # solo perfTelemetry.ts:144
+```
+
+Lo que contiene `Perf` es su **propia** puerta: el sink solo se registra con `PERF_MODE=1` **y**
+`PERF_MARKER_URL` **y** `PERF_CONTROL_TOKEN`. Es el arnés de `tools/perftest`. O sea: el camino está
+cerrado, pero **no por lo que decíamos que lo cerraba**. Un documento que da por cortado un camino
+que nadie está cortando es peor que no decir nada, porque desactiva la revisión: quien añadiera un
+sink por omisión abriría una salida de red y nadie la relacionaría con la telemetría.
+
+Se corrigió §6 y §15.3, se reescribió el comentario de `overrides/telemetry.ts`, y la invariante real
+ya no depende de que alguien se acuerde: `telemetryOverride.test.ts` comprueba que **sin `PERF_MODE`
+no hay ningún sink registrado**, y que `disableTelemetry()` no interviene en ese camino.
+
+De paso se corrigió **cómo** queda muerto el reporter. No es que se quede en `undefined` con buenos
+modales: `new VsCodeTelemetryReporter(undefined)` **lanza** un `TypeError` desde
+`shouldUseOneDataSystemSDK` (hace `key.length` sobre `undefined`) y el `try/catch` del toolkit se lo
+traga. Importa saberlo porque el aviso `Error initializing TelemetryReporter:` de la consola **es** el
+corte, no ruido: quien lo silencie pasando una clave de relleno reabre el envío.
+
+### 26.7. Dos archivos fuente del fork que git no podía leer
+
+La auditoría encontró algo que no tiene que ver con el merge y que llevaba desde M4/M6 en el árbol:
+**dos archivos del fork contenían un byte NUL crudo**, de modo que git los clasificaba como binarios.
+
+```
+extensions/mssql/src/custom/admin/sql/ddl/secrets.ts:73        if (secret.includes("<NUL>"))
+extensions/mssql/src/custom/sharedInterfaces/permissionMatrix.ts:106   ].join("<NUL>")
+```
+
+Consecuencia real, no teórica: `git diff --numstat` devolvía `-` para esos dos archivos en lugar del
+recuento de líneas, y **`git grep` no los miraba**. Dos fuentes del fork quedaban fuera de cualquier
+revisión hecha con las herramientas que este mismo documento prescribe.
+
+El origen ya se conocía a medias: `eslint --fix` convierte un escape `u0000` en el byte crudo. En M5
+y M6 se arregló en los **tests** con `String.fromCharCode(0)`, y se dio por cerrado sin mirar los
+fuentes. Ahora están los dos.
+
+Y tiene una coda que vale la pena dejar escrita: **al documentar el problema en un comentario, se
+volvió a caer en él**. Se escribió el escape dentro del comentario, `eslint --fix` lo convirtió en un
+NUL crudo, y el archivo volvió a ser binario. La regla no es «no uses el escape en el código», es **no
+lo escribas en el archivo, ni siquiera en un comentario**. Comprobado ejecutando `eslint --fix` dos
+veces sobre los dos archivos: 0 bytes NUL y estable.
+
+### 26.8. Lo que el merge deja sobre la mesa, y no decido yo
+
+El merge trae **una salida de red nueva**. No se ha tocado nada: es una decisión del usuario, del
+mismo tipo que las 11.4 y 11.5 que ya están en la tabla de §11.
+
+Conviene ser preciso con qué choca exactamente, porque es fácil pasarse. **No contradice la decisión
+11.4**: aquélla iba de _cómo empaquetar el SQL Tools Service_, y sus tres razones siguen siendo
+ciertas del STS. Lo que sí choca es la **intención que esa decisión cita del brief** —«el brief
+quiere que la extensión no hable con ningún servidor»— y que hasta ahora se cumplía de hecho, no solo
+en el STS. Es una intención, no una regla del §11, así que no obliga a nada por sí sola; por eso esto
+es una recomendación y no un arreglo.
+
+**Lo medido:**
+
+1. `src/dab/dabCliTool.ts` descarga la CLI de Data API Builder (un `.nupkg`) y **ejecuta lo que
+   desempaqueta**, con `spawn(..., {detached: true})`: el proceso sobrevive a cerrar VS Code. No hay
+   comprobación de firma ni de hash.
+2. El feed **no es fijo**. `dabNuGetFeed.ts` recorre los `NuGet.Config` de la carpeta abierta y de
+   todos sus padres, y gana la primera fuente que conteste; `api.nuget.org` es el último recurso. Es
+   decir: **el repositorio que tengas abierto puede decidir de dónde sale el binario**. La extensión
+   declara soportar espacios de trabajo no confiables.
+3. Vuelve a hacer falta `ms-dotnettools.vscode-dotnet-runtime` (o un `dotnet` en el `PATH`), que es
+   justo la dependencia que la razón 3 de §11.4 dice que quitamos.
+4. **Hoy no se alcanza**: cuelga de `mssql.schemaDesigner.enableDeploymentsView`, y
+   `isDeploymentsViewEnabled()` hace `!!get<boolean>(...)` sobre un ajuste **que el upstream no
+   declara en su `package.json`**. Sin declarar vale `undefined`, y la función queda apagada.
+
+**Por qué no lo doy por resuelto.** El punto 4 no es una decisión nuestra: es un **descuido del
+upstream**. El día que lo declaren —o que alguien escriba la clave a mano en un `settings.json` de
+repositorio, que nada se lo impide— se enciende sola una función que descarga y ejecuta un binario
+elegido por el repositorio abierto.
+
+**Las opciones, con su coste:**
+
+| Opción                                                                                                      | Coste                                                | Contrapartida                                                                                                                          |
+| ----------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **(a)** Dejarlo como está y documentarlo                                                                    | Cero                                                 | La política de «sin red» depende de un descuido ajeno                                                                                  |
+| **(b)** Declarar `mssql.schemaDesigner.enableDeploymentsView` con `default: false` y `scope: "application"` | Dos líneas en `package.json`, que ya es anclaje nº 1 | Convierte el apagado en decisión nuestra, y un repositorio no lo puede encender. Al declararlo, además, sale en la interfaz de ajustes |
+| **(c)** Fijar también `mssql.dab.cliPackageFeedUrl` a un espejo NuGet interno                               | Una línea más, pero hace falta la URL de la empresa  | Cierra el punto 2 incluso si algún día se enciende                                                                                     |
+
+**Recomiendo (b)**, y (c) si existe un espejo interno. (b) usa el anclaje que ya tenemos, no toca
+código del upstream, no cambia el comportamiento efectivo de hoy —`undefined` y `false` se comportan
+igual— y sigue el mismo patrón que `sqlworks.productionServers` en §22.7, donde el `scope:
+"application"` está precisamente para que un `settings.json` de repositorio no pueda cambiarlo.
+
+Lo que **no** hay que hacer es la tercera vía: parchear `src/dab/*` o `src/services/dabService.ts`.
+Serían archivos del upstream fuera de §0 y un quinto anclaje, justo lo que este hito acaba de
+demostrar que sale barato no tener.
+
+### 26.9. Verificación
+
+| Qué                                  | Estado                                                     |
+| ------------------------------------ | ---------------------------------------------------------- |
+| Conflictos del merge                 | ✅ 0                                                       |
+| Archivos de `src/custom/` tocados    | ✅ 0                                                       |
+| Determinismo del merge               | ✅ mismo árbol `c75f492e` en tres reconstrucciones         |
+| `npm run build -- --target mssql`    | ✅                                                         |
+| Typecheck de extensión y de webviews | ✅ los dos, con `tsgo`                                     |
+| Lint                                 | ✅                                                         |
+| Suite completa                       | ✅ **5540 pasan, 0 fallan**, 17 omitidos (312 archivos)    |
+| Unitarios propios del fork           | ✅ 290 (2 nuevos en M9, la invariante de `Perf`)           |
+| e2e del fork                         | ✅ 3/3                                                     |
+| e2e del upstream (paridad 1 y 7)     | ✅ **13/13**, tras arreglar la regresión de §26.4          |
+| Arnés JSON-RPC de paridad            | ✅ 6/6 contra SQL Server 2022 real                         |
+| Lista de paridad                     | ✅ ocho de nueve; 1b sigue necesitando un dominio Kerberos |
+
+El aumento respecto a M8 es del upstream, y está medido: solo sus archivos nuevos de
+`test/unit/dab/` aportan **312 tests**, y pasan todos sin tocar nada. (No se compara contra la cifra
+de §25.8, «5186 + 205», porque aquélla salió de contar los dos ejecutores por separado y no es
+homogénea con ésta.)
+
+### 26.10. Lo que M9 deliberadamente no hace
+
+- **No actualiza el inventario de §1 a §10 a la punta del upstream.** El inventario describe el
+  terreno sobre el que se construyó el fork; reescribirlo en cada merge perdería esa foto. Lo que el
+  merge dejó falso está corregido en el sitio y señalado; lo nuevo, en §26.3.
+- **No toca `src/dab/` ni nada de la función nueva del upstream.** Ver §26.8.
+- **No cierra la paridad 1b.** Sigue haciendo falta un dominio Kerberos, que este entorno no tiene.
+- **No renumera las secciones ni reordena el documento**, aunque nueve correcciones invitaban a ello:
+  las referencias cruzadas `§N` de este archivo y de los comentarios del código dejarían de valer.
