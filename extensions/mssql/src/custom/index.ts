@@ -11,6 +11,7 @@ import { SnippetCompletionProvider } from "./snippets/completion";
 import { SnippetsViewController } from "./snippets/snippetsViewController";
 import { FormatProfilesController } from "./format/formatProfilesController";
 import { pickAndApplyProfile } from "./format/applyProfileCommand";
+import { watchNetworkSettings } from "./overrides/networkWatch";
 
 /**
  * Identificadores de los comandos que aporta el fork.
@@ -120,6 +121,12 @@ export function registerCustom(
             pickAndApplyProfile(context),
         ),
     );
+
+    // --- M9: vigilancia de las salidas de red del upstream ---
+    //
+    // No apaga nada: avisa si alguien ha encendido las claves de Data API Builder que descargan y
+    // ejecutan un binario de un feed externo. Ver `overrides/networkWatch.ts` y FORK.md §26.8.
+    keep(watchNetworkSettings());
 }
 
 /** Lo que registró la última llamada a `registerCustom`. */

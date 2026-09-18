@@ -14,6 +14,9 @@ import * as cp from "child_process";
 import { ElectronApplication, Page } from "@playwright/test";
 import { getVsCodeVersionName } from "./envConfigReader";
 import * as os from "os";
+// [FORK] Para `--folder-uri`: la ruta hay que darla como URI, y `pathToFileURL` la escapa bien
+// (espacios, acentos, y las barras de Windows).
+import { pathToFileURL } from "url";
 
 export type VsCodeAppHandle = ElectronApplication;
 
@@ -21,6 +24,11 @@ export type mssqlExtensionLaunchConfig = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     initialConfig?: any;
     useVsix?: boolean;
+    // [FORK] Carpeta que se abre como espacio de trabajo. Sin esto VS Code arranca sin carpeta, y
+    // entonces no existen los ámbitos de espacio de trabajo ni de carpeta: no hay forma de
+    // comprobar que un `.vscode/settings.json` NO puede cambiar un ajuste nuestro. Lo usa
+    // `sqlworksSettingScope.spec.ts`. Ver FORK.md §27.
+    workspaceFolder?: string;
 };
 
 export const DEFAULT_USER_CONFIG = {
@@ -134,6 +142,14 @@ export async function launchVsCodeWithMssqlExtension(
         installExtension(cliPath, vsixPath, userDataDir, extensionsDir);
     } else {
         launchArgs.push("--temp-profile");
+    }
+
+    // [FORK] Se usa `--folder-uri` y no el argumento suelto con la ruta. Medido: pasando la ruta
+    // como argumento posicional junto a `--temp-profile` y `--extensionDevelopmentPath`, VS Code
+    // arranca con la ventana **vacía** y se la traga sin avisar. `--folder-uri` es explícito y sí
+    // abre la carpeta. Ver el comentario de `workspaceFolder` y FORK.md §27.
+    if (config.workspaceFolder) {
+        launchArgs.push(`--folder-uri=${pathToFileURL(config.workspaceFolder).href}`);
     }
 
     const shouldRecordVideo =

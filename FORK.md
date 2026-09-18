@@ -70,16 +70,17 @@ M1 y M2.
 Todos por la misma razón: fijaban el identificador de la extensión o el título del contenedor de
 vistas como literal. Detalle y síntomas en §15.6 y §15.7.
 
-| Archivo                                                              | Qué se cambió                                                                                                                                      | Hito |
-| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **1 línea**: selector de la pestaña de la barra de actividad                                                                                       | M1   |
-| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **4 líneas de lógica**: espera a que el árbol de conexiones exista, en lugar del nodo «Add Connection» que solo aparece con el árbol vacío (§17.4) | M0   |
-| `extensions/mssql/test/e2e/utils/testHelpers.ts`                     | **1 línea**: el mismo selector                                                                                                                     | M1   |
-| `extensions/mssql/test/unit/databaseProjects/testUtils.ts`           | **2 líneas**: usa la constante en vez del literal, más su `import`                                                                                 | M1   |
-| `extensions/mssql/test/unit/databaseProjects/testContext.ts`         | **2 líneas**: ídem                                                                                                                                 | M1   |
-| `extensions/mssql/test/unit/databaseProjects/baselines/baselines.ts` | **2 líneas**: ídem                                                                                                                                 | M1   |
-| `extensions/mssql/test/unit/databaseProjects/buildHelper.test.ts`    | **3 líneas**: ídem, dos usos                                                                                                                       | M1   |
-| `extensions/mssql/test/unit/azureResourcesIntegration.test.ts`       | **2 líneas**: la aserción de la autoridad del URI, más su `import`                                                                                 | M1   |
+| Archivo                                                              | Qué se cambió                                                                                                                                                                                                                                                                                                  | Hito |
+| -------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **1 línea**: selector de la pestaña de la barra de actividad                                                                                                                                                                                                                                                   | M1   |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **4 líneas de lógica**: espera a que el árbol de conexiones exista, en lugar del nodo «Add Connection» que solo aparece con el árbol vacío (§17.4)                                                                                                                                                             | M0   |
+| `extensions/mssql/test/e2e/utils/launchVscodeWithMsSqlExt.ts`        | **5 líneas**: un `workspaceFolder` opcional en la configuración de lanzamiento, su `--folder-uri` y el `import` de `pathToFileURL`. Sin carpeta abierta no existen los ámbitos de espacio de trabajo ni de carpeta, y no se puede medir que un `.vscode/settings.json` **no** cambia un ajuste nuestro (§27.1) | M9   |
+| `extensions/mssql/test/e2e/utils/testHelpers.ts`                     | **1 línea**: el mismo selector                                                                                                                                                                                                                                                                                 | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testUtils.ts`           | **2 líneas**: usa la constante en vez del literal, más su `import`                                                                                                                                                                                                                                             | M1   |
+| `extensions/mssql/test/unit/databaseProjects/testContext.ts`         | **2 líneas**: ídem                                                                                                                                                                                                                                                                                             | M1   |
+| `extensions/mssql/test/unit/databaseProjects/baselines/baselines.ts` | **2 líneas**: ídem                                                                                                                                                                                                                                                                                             | M1   |
+| `extensions/mssql/test/unit/databaseProjects/buildHelper.test.ts`    | **3 líneas**: ídem, dos usos                                                                                                                                                                                                                                                                                   | M1   |
+| `extensions/mssql/test/unit/azureResourcesIntegration.test.ts`       | **2 líneas**: la aserción de la autoridad del URI, más su `import`                                                                                                                                                                                                                                             | M1   |
 
 **Coste real de merge, medido.** La cifra que importa es cuántas líneas **del upstream** hemos
 sustituido, porque son las únicas que pueden entrar en conflicto; las que añadimos encima (casi
@@ -2887,14 +2888,25 @@ elegido por el repositorio abierto.
 | **(b)** Declarar `mssql.schemaDesigner.enableDeploymentsView` con `default: false` y `scope: "application"` | Dos líneas en `package.json`, que ya es anclaje nº 1 | Convierte el apagado en decisión nuestra, y un repositorio no lo puede encender. Al declararlo, además, sale en la interfaz de ajustes |
 | **(c)** Fijar también `mssql.dab.cliPackageFeedUrl` a un espejo NuGet interno                               | Una línea más, pero hace falta la URL de la empresa  | Cierra el punto 2 incluso si algún día se enciende                                                                                     |
 
-**Recomiendo (b)**, y (c) si existe un espejo interno. (b) usa el anclaje que ya tenemos, no toca
-código del upstream, no cambia el comportamiento efectivo de hoy —`undefined` y `false` se comportan
-igual— y sigue el mismo patrón que `sqlworks.productionServers` en §22.7, donde el `scope:
-"application"` está precisamente para que un `settings.json` de repositorio no pueda cambiarlo.
-
 Lo que **no** hay que hacer es la tercera vía: parchear `src/dab/*` o `src/services/dabService.ts`.
 Serían archivos del upstream fuera de §0 y un quinto anclaje, justo lo que este hito acaba de
 demostrar que sale barato no tener.
+
+> **Resuelto. El usuario eligió (d) y (e)**, no (b) ni (c). Lo hecho está en **§27**, y con ello esta
+> sección queda corregida en tres puntos que se daban por buenos aquí:
+>
+> 1. **El mapa de esta sección estaba incompleto.** La salida de red **no es nueva del merge**: el
+>    destino de contenedor, que descarga de MCR, ya estaba antes de M9 y **no está detrás de ningún
+>    ajuste**. El punto 4 de arriba («hoy no se alcanza») solo vale para la rama de la CLI. Con el
+>    ajuste apagado, la barra de DAB sigue ofreciendo un botón **«Deploy»** que va a esa rama.
+> 2. **El riesgo de la 11.3 estaba señalado al revés.** El camino de la CLI —el nuevo— **no** escribe
+>    la contraseña en disco: su configuración lleva `@env('DAB_CONNECTION_STRING')`. El que sí la
+>    escribe, completa y en un temporal, es el camino de **contenedor**, que es el viejo (§27.3).
+> 3. **(b) tenía un coste que no se contabilizó:** sería la primera clave `mssql.*` que el fork añade
+>    al manifiesto, y la regla de auditoría del §0 —`git grep '"sqlworks\.'`— dejaría de bastar.
+>
+> Y la creencia sobre la que se apoyaba la recomendación —que `scope: "application"` impide que un
+> repositorio escriba la clave— **ya no es una creencia: está medida** (§27.1). Resultó ser cierta.
 
 ### 26.9. Verificación
 
@@ -2927,3 +2939,138 @@ homogénea con ésta.)
 - **No cierra la paridad 1b.** Sigue haciendo falta un dominio Kerberos, que este entorno no tiene.
 - **No renumera las secciones ni reordena el documento**, aunque nueve correcciones invitaban a ello:
   las referencias cruzadas `§N` de este archivo y de los comentarios del código dejarían de valer.
+
+---
+
+## 27. Lo que el usuario decidió sobre §26.8: medir y avisar
+
+De las cinco opciones de §26.8 el usuario eligió **(e)** y **(d)**, y descartó declarar la clave
+(b) y fijar el feed (c). Es decir: **nada de prevención, sí de medición y visibilidad**. Esta sección
+cuenta las dos, y lo que se aprendió al hacerlas, que fue más de lo previsto.
+
+### 27.1. (e) `scope: "application"` protege de verdad — ahora medido
+
+**El resultado:** un `.vscode/settings.json` de repositorio **no puede** tocar
+`sqlworks.productionServers`. La afirmación de §22.7 y la de la descripción del ajuste en el
+`package.json` son ciertas.
+
+Importa más de lo que parece. Esa frase no adorna nada: sostiene la regla 11.4 del brief, que es la
+barrera que obliga a escribir el nombre del objeto antes de tocar un servidor marcado. Desde M5
+estaba escrita como un hecho, y **era conocimiento del API de VS Code, no una medida de este
+repositorio**. Se descubrió al estudiar la opción (b) de §26.8, que se apoyaba en la misma creencia:
+al ir a comprobar si la recomendación era sólida, resultó que ya había un control en producción
+colgando de ella.
+
+El test es `test/e2e/sqlworksSettingScope.spec.ts`, y es **un experimento controlado, no una
+comprobación**. Una sola prueba no mediría nada: si se siembra el ajuste en la carpeta y la marca no
+aparece, eso no distingue «lo filtró el `scope`» de «el ajuste está mal escrito» o «el panel no llegó
+a leerlo». Así que son dos arranques con **una sola variable, el ámbito**:
+
+|             | Dónde se escribe el ajuste                | Resultado esperado      | Medido |
+| ----------- | ----------------------------------------- | ----------------------- | ------ |
+| **Control** | `settings.json` de **usuario**            | La marca aparece        | ✅     |
+| **Prueba**  | `.vscode/settings.json` de la **carpeta** | La marca **no** aparece | ✅     |
+
+Los dos abren la misma carpeta, para que lo único distinto sea dónde está escrito.
+
+**Si este test se pone rojo algún día no es un test frágil que relajar**: significaría que un
+repositorio clonado puede desmarcar un servidor de producción. El arreglo sería cambiar el `scope`
+(`machine` es el equivalente, y además queda fuera de Settings Sync), no ablandar la aserción.
+
+### 27.2. Dos formas de que el test se pusiera verde sin medir nada
+
+Las dos ocurrieron. Se dejan escritas porque son el tipo de fallo que no se ve en el resultado.
+
+**La primera: no había carpeta.** La primera versión del test **pasaba, y no medía nada**. VS Code
+se tragaba sin avisar la ruta pasada como argumento suelto y arrancaba con la ventana vacía; sin
+espacio de trabajo no hay ajustes de espacio de trabajo, así que la marca no aparecía y el test se
+ponía verde. Se descubrió mirando la captura de un test **vecino** que había fallado: el editor
+mostraba «Open Folder». Dos arreglos:
+
+- `--folder-uri=<uri>` en lugar del argumento posicional, que sí abre la carpeta.
+- **Asertar la premisa**: los tres tests comprueban ahora, contra el título de la ventana, que la
+  carpeta está abierta **antes** de medir nada. Es la lección de verdad de esta sección: un test cuya
+  premisa no se comprueba puede pasar por el motivo equivocado, y éste lo hizo.
+
+**La segunda: la confianza del espacio de trabajo.** VS Code abre una carpeta desconocida en modo
+restringido y **descarta por su cuenta parte de los ajustes de espacio de trabajo**. En ese estado la
+marca tampoco habría aparecido, pero por un motivo distinto del que se quería medir, y el test no
+habría podido distinguirlos. Por eso los tres arranques llevan
+`"security.workspace.trust.enabled": false`: con la confianza fuera de la ecuación, lo único que
+puede descartar el ajuste es su ámbito.
+
+### 27.3. (d) El control detectivo, y qué no hace
+
+Vive en `src/custom/overrides/networkWatch.ts` y lo arranca `registerCustom`, que ya es el anclaje
+nº 2. **Cero anclajes nuevos, cero archivos del upstream tocados**, que es justo lo que lo hacía
+preferible a (b).
+
+Vigila las dos claves de Data API Builder y **avisa si alguien las ha encendido, diciendo en qué
+ámbito**. Nada más. Conviene ser explícito sobre lo que **no** hace:
+
+- **No apaga la función** ni bloquea la descarga.
+- **No cierra el camino del contenedor**, que es el que está abierto (§26.8, corrección 1).
+- **No sustituye a (b)**: si el upstream declara la clave algún día, un repositorio seguirá pudiendo
+  encenderla. Lo que cambia es que se notará.
+
+Lo que sí cubre y (b) no cubriría: **la propia persona encendiéndola en sus ajustes**. Un `scope` no
+protege de eso.
+
+Tres decisiones de diseño que se tomaron a propósito:
+
+1. **`inspect()`, no `get()`.** `get()` da el valor efectivo y se traga de dónde viene; aquí el
+   origen es justo lo que importa. Que `inspect()` devuelva algo para una clave **sin declarar** era
+   otra suposición —si devolviera `undefined`, el control no se dispararía jamás— así que hay un
+   test que lo mide dentro de un VS Code real.
+2. **Gana el ámbito más específico definido, y solo entonces se mira si está encendida.** No es lo
+   mismo que «el primer ámbito encendido»: si los ajustes de usuario la encienden pero el espacio de
+   trabajo la apaga a propósito, el valor efectivo es «apagada» y avisar sería mentir. Un aviso que a
+   veces miente deja de leerse.
+3. **Se exige `=== true`**, aunque el upstream lea la clave con `!!`. Avisar por la cadena `"false"`
+   sería un falso positivo. Se acepta el hueco a cambio de que el aviso, cuando salga, sea cierto.
+
+### 27.4. Lo que el e2e de (d) midió de paso
+
+El tercer test de `sqlworksSettingScope.spec.ts` comprueba el aviso, y al hacerlo **mide la premisa
+de §26.8**, que también estaba sin comprobar: que una clave **sin declarar** sí la puede encender un
+repositorio.
+
+Lo es. Con `mssql.schemaDesigner.enableDeploymentsView: true` en el `.vscode/settings.json` de la
+carpeta, el fork avisa y dice «espacio de trabajo». O sea que la preocupación de §26.8 era real, y el
+aviso la hace visible.
+
+### 27.5. Verificación
+
+| Qué                                | Estado                                                      |
+| ---------------------------------- | ----------------------------------------------------------- |
+| Unitarios nuevos                   | ✅ 14 (`networkWatch`), uno de ellos contra el VS Code real |
+| Suite completa                     | ✅ **5554 pasan, 0 fallan**                                 |
+| e2e nuevo (`sqlworksSettingScope`) | ✅ 3/3, con la premisa asertada                             |
+| e2e del fork                       | ✅ 3/3                                                      |
+| e2e del upstream (paridad 1 y 7)   | ✅ 13/13                                                    |
+| Build, lint, los dos typechecks    | ✅                                                          |
+
+En total, **19 tests e2e en verde**: 3 del fork, 3 nuevos y 13 del upstream.
+
+> **Sobre un fallo de entorno que conviene no confundir con una regresión.** En este contenedor, el
+> arnés e2e falla a veces antes de ejecutar ningún test, al instalar
+> `ms-dotnettools.vscode-dotnet-runtime` desde el marketplace (`ECONNRESET`). No tiene que ver con el
+> fork ni con estos cambios: muere en el paso de instalación. Las cifras de arriba son de una
+> ejecución con `SKIP_DOTNET_RUNTIME_EXTENSION_INSTALL=true`, que en este fork es legítimo saltarse:
+> M1 sacó esa extensión del `extensionPack` justamente porque el SQL Tools Service va empaquetado
+> (§11.4). Si alguien ve ese fallo, es la red del entorno, no el código.
+
+Coste en deuda de merge: **5 líneas de código** (16 con sus comentarios) en
+`test/e2e/utils/launchVscodeWithMsSqlExt.ts` —un campo opcional en la configuración de lanzamiento,
+su `--folder-uri` y el `import` de `pathToFileURL`—, en un archivo de arnés que ya estaba en §0.
+**Ni una línea de producto del upstream.**
+
+### 27.6. Lo que esto deliberadamente no hace
+
+- **No declara `mssql.schemaDesigner.enableDeploymentsView`** (opción (b)): descartada por el usuario.
+  Sigue disponible en §26.8 si algún día se quiere prevención y no solo visibilidad.
+- **No fija `mssql.dab.cliPackageFeedUrl`** (opción (c)): haría falta la URL de un espejo interno, y
+  `default: ""` no serviría de nada porque el upstream la lee con `?.trim() || undefined`.
+- **No toca el camino del contenedor**, que sigue abierto y sigue escribiendo la cadena de conexión
+  —con contraseña— en un temporal con permisos `0600` que borra después. Está en §26.8 como lo que
+  es: un hecho conocido y aceptado, no un descuido.

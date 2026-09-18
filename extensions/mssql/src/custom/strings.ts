@@ -259,4 +259,15 @@ export const Strings = {
             "order by total_gastado desc;",
         ].join("\n"),
     },
+    networkWatch: {
+        /**
+         * Aviso de que una de las claves vigiladas está encendida.
+         *
+         * Dice **dónde** está puesta, porque es lo primero que hay que saber para quitarla, y porque
+         * distingue el caso inocente (la puso la persona) del que preocupa (venía en el repositorio).
+         * No dice «peligro» ni pide nada: informa de un hecho y nombra la clave exacta.
+         */
+        settingEnabled: (label: string, key: string, scope: string) =>
+            `SQLWorks: ${label} está activado en los ajustes de ${scope} (\`${key}\`). Esa función descarga y ejecuta un binario desde un feed externo, que no es lo que este fork hace por omisión. Ver FORK.md §26.8.`,
+    },
 } as const;
