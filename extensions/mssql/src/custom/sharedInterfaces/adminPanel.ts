@@ -12,9 +12,14 @@
 import { CustomWebviewKind, CustomWebviewStateBase } from "./customWebview";
 import {
     ActiveSession,
+    DatabaseChoice,
+    DatabaseRole,
+    DatabaseUser,
     InstanceProperties,
     KillPermissions,
     Login,
+    PermissionMatrixData,
+    SchemaInfo,
     ServerPermission,
     ServerRole,
 } from "../admin/sql/types";
@@ -41,7 +46,10 @@ export interface ConnectionTarget {
     readAt: string;
 }
 
-/** Secciones del panel. El orden es el del brief: §8.1 a §8.5. */
+/**
+ * Secciones del panel. El orden es el del brief: primero el servidor (§8.1 a §8.5) y después la
+ * base de datos seleccionada (§8.3.1 a §8.3.3, más la matriz del §10).
+ */
 export enum AdminSection {
     /** Resumen de la conexión, lo que el panel mostraba en M2. */
     Overview = "overview",
@@ -50,6 +58,10 @@ export enum AdminSection {
     ServerPermissions = "serverPermissions",
     Instance = "instance",
     Sessions = "sessions",
+    Users = "users",
+    DatabaseRoles = "databaseRoles",
+    Schemas = "schemas",
+    DatabasePermissions = "databasePermissions",
 }
 
 /** Secciones que cargan datos del servidor. `Overview` no consulta nada. */
@@ -59,7 +71,27 @@ export const LOADABLE_SECTIONS = [
     AdminSection.ServerPermissions,
     AdminSection.Instance,
     AdminSection.Sessions,
+    AdminSection.Users,
+    AdminSection.DatabaseRoles,
+    AdminSection.Schemas,
+    AdminSection.DatabasePermissions,
 ] as const;
+
+/**
+ * Secciones que dependen de la base de datos seleccionada: al cambiar de base hay que volver a
+ * leerlas, y las del servidor no.
+ */
+export const DATABASE_SECTIONS = [
+    AdminSection.Users,
+    AdminSection.DatabaseRoles,
+    AdminSection.Schemas,
+    AdminSection.DatabasePermissions,
+] as const;
+
+/** `true` si la sección lee de la base seleccionada y no de la instancia. */
+export function isDatabaseSection(section: AdminSection): boolean {
+    return (DATABASE_SECTIONS as readonly AdminSection[]).includes(section);
+}
 
 /** Estado de carga de una sección. */
 export type SectionStatus = "idle" | "loading" | "loaded" | "error";
@@ -107,6 +139,20 @@ export interface AdminPanelState extends CustomWebviewStateBase {
     sessions: SectionState<ActiveSession[]>;
     /** Permisos sobre sesiones, leídos junto con la sección de sesiones. */
     sessionCapabilities?: SessionCapabilities;
+
+    // --- Base de datos seleccionada (M4) ---
+    /**
+     * Base sobre la que trabajan las secciones de base de datos. Arranca en la de la conexión, y el
+     * selector de la cabecera la cambia sin tocar la conexión: las consultas llegan al catálogo con
+     * nombre de tres partes, nunca con `USE`.
+     */
+    selectedDatabase: string;
+    /** Bases de la instancia, para el selector. */
+    databases: SectionState<DatabaseChoice[]>;
+    users: SectionState<DatabaseUser[]>;
+    databaseRoles: SectionState<DatabaseRole[]>;
+    schemas: SectionState<SchemaInfo[]>;
+    databasePermissions: SectionState<PermissionMatrixData>;
 }
 
 /**
@@ -127,6 +173,11 @@ export interface AdminPanelReducers {
      * antes de ejecutar nada.
      */
     killSession: { sessionId: number };
+    /**
+     * Cambia la base de datos sobre la que trabajan las secciones de base. **No cambia la conexión**:
+     * solo el nombre con el que se construyen las consultas de catálogo.
+     */
+    selectDatabase: { database: string };
 }
 
 /** Clave del estado donde vive cada sección cargable. */
@@ -136,4 +187,8 @@ export const SECTION_STATE_KEYS = {
     [AdminSection.ServerPermissions]: "serverPermissions",
     [AdminSection.Instance]: "instance",
     [AdminSection.Sessions]: "sessions",
+    [AdminSection.Users]: "users",
+    [AdminSection.DatabaseRoles]: "databaseRoles",
+    [AdminSection.Schemas]: "schemas",
+    [AdminSection.DatabasePermissions]: "databasePermissions",
 } as const satisfies Record<(typeof LOADABLE_SECTIONS)[number], keyof AdminPanelState>;

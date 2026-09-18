@@ -11,16 +11,20 @@ import {
     AdminPanelReducers,
     AdminPanelState,
     AdminSection,
+    DATABASE_SECTIONS,
     SECTION_STATE_KEYS,
     SectionState,
     SessionCapabilities,
+    isDatabaseSection,
 } from "../../sharedInterfaces/adminPanel";
 import { CustomWebviewKind } from "../../sharedInterfaces/customWebview";
 import { resolveConnectionTarget } from "../../util/connectionTarget";
 import { Strings } from "../../strings";
 import { AdminQueryRunner } from "../sql/execute";
 import { ServerSecurityService, SectionResult } from "../serverSecurityService";
+import { DatabaseSecurityService } from "../databaseSecurityService";
 import { SessionAdminService } from "../sessionAdminService";
+import { isValidIdentifier } from "../../util/identifiers";
 import { buildKillStatement, canKillSessions, isSameSession } from "../sql/queries/killSession";
 import { ActiveSession, KillPermissions } from "../sql/types";
 import { formatSeconds } from "../../sharedInterfaces/duration";
@@ -58,6 +62,7 @@ export class AdminPanelController extends WebviewPanelController<
     public readonly connectionUri: string;
 
     private readonly security: ServerSecurityService;
+    private readonly databaseSecurity: DatabaseSecurityService;
     private readonly sessionAdmin: SessionAdminService;
 
     private constructor(
@@ -81,8 +86,12 @@ export class AdminPanelController extends WebviewPanelController<
         this.connectionUri = connectionUri;
         const runner = new AdminQueryRunner(connectionManager, connectionUri);
         this.security = new ServerSecurityService(runner);
+        this.databaseSecurity = new DatabaseSecurityService(runner);
         this.sessionAdmin = new SessionAdminService(runner);
         this.registerReducers();
+        // El selector de bases se llena en cuanto abre el panel: es una sola consulta a
+        // `sys.databases` y sin ella no se puede cambiar de base.
+        void this.loadDatabases();
     }
 
     /**
@@ -113,6 +122,14 @@ export class AdminPanelController extends WebviewPanelController<
                 serverPermissions: idleSection(),
                 instance: idleSection(),
                 sessions: idleSection(),
+                // Las secciones de base arrancan apuntando a la base de la conexión, que es lo que
+                // el usuario tenía seleccionado en el árbol.
+                selectedDatabase: resolved.target.database,
+                databases: idleSection(),
+                users: idleSection(),
+                databaseRoles: idleSection(),
+                schemas: idleSection(),
+                databasePermissions: idleSection(),
             },
             resolved.connectionUri,
         );
@@ -156,6 +173,41 @@ export class AdminPanelController extends WebviewPanelController<
             // `killSession` publica el estado por su cuenta (permisos y recarga de la sección).
             return this.state;
         });
+
+        this.registerReducer("selectDatabase", (state, payload) => {
+            const database = payload.database;
+            // Salvaguarda: el nombre acaba dentro de una consulta, así que se valida antes de
+            // guardarlo, no solo al construir la sentencia (regla 11.2 del brief).
+            if (!isValidIdentifier(database) || database === state.selectedDatabase) {
+                return state;
+            }
+
+            // Las secciones de base pasan a «sin leer», y la visible se relee. Las del servidor no
+            // se tocan: no dependen de la base.
+            const next: AdminPanelState = { ...state, selectedDatabase: database };
+            for (const section of DATABASE_SECTIONS) {
+                next[SECTION_STATE_KEYS[section]] = idleSection() as never;
+            }
+            if (isDatabaseSection(state.activeSection)) {
+                void this.loadSection(state.activeSection, database);
+            }
+            return next;
+        });
+    }
+
+    /** Llena el selector de bases de datos. Su fallo no rompe nada más del panel. */
+    private async loadDatabases(): Promise<void> {
+        this.updateSection("databases", { status: "loading" });
+        const result = await this.databaseSecurity.loadDatabases();
+        if (this.isDisposed) {
+            return;
+        }
+        this.updateSection(
+            "databases",
+            result.errorMessage
+                ? { status: "error", errorMessage: result.errorMessage }
+                : { status: "loaded", data: result.data, readAt: new Date().toISOString() },
+        );
     }
 
     /**
@@ -289,7 +341,7 @@ export class AdminPanelController extends WebviewPanelController<
      * No lanza: un fallo de permisos o de red se muestra dentro de la sección, y las demás siguen
      * funcionando.
      */
-    private async loadSection(section: AdminSection): Promise<void> {
+    private async loadSection(section: AdminSection, database?: string): Promise<void> {
         if (section === AdminSection.Overview) {
             return;
         }
@@ -297,7 +349,7 @@ export class AdminPanelController extends WebviewPanelController<
 
         this.updateSection(key, { status: "loading" });
 
-        const result = await this.read(section);
+        const result = await this.read(section, database ?? this.state.selectedDatabase);
         if (this.isDisposed) {
             return;
         }
@@ -319,8 +371,17 @@ export class AdminPanelController extends WebviewPanelController<
         }
     }
 
-    /** Despacha la lectura a la consulta que corresponde. */
-    private async read(section: AdminSection): Promise<SectionResult<unknown>> {
+    /**
+     * Despacha la lectura a la consulta que corresponde.
+     *
+     * Las secciones de base reciben el nombre de la base seleccionada, que va validado y entre
+     * corchetes dentro de la consulta. Si el nombre no es válido, ni se intenta.
+     */
+    private async read(section: AdminSection, database: string): Promise<SectionResult<unknown>> {
+        if (isDatabaseSection(section) && !isValidIdentifier(database)) {
+            return { errorMessage: Strings.adminPanel.invalidDatabaseName };
+        }
+
         switch (section) {
             case AdminSection.Logins:
                 return await this.security.loadLogins();
@@ -332,14 +393,27 @@ export class AdminPanelController extends WebviewPanelController<
                 return await this.security.loadInstanceProperties();
             case AdminSection.Sessions:
                 return await this.security.loadActiveSessions();
+            case AdminSection.Users:
+                return await this.databaseSecurity.loadUsers(database);
+            case AdminSection.DatabaseRoles:
+                return await this.databaseSecurity.loadRoles(database);
+            case AdminSection.Schemas:
+                return await this.databaseSecurity.loadSchemas(database);
+            case AdminSection.DatabasePermissions:
+                return await this.databaseSecurity.loadPermissionData(database);
             default:
                 return { errorMessage: Strings.adminPanel.unknownSection };
         }
     }
 
-    /** Reemplaza el estado de una sección sin tocar las demás. */
+    /**
+     * Reemplaza el estado de una sección sin tocar las demás.
+     *
+     * `databases` no es una sección con pestaña —es el selector de la cabecera— pero tiene el mismo
+     * ciclo de carga, así que comparte el mecanismo.
+     */
     private updateSection(
-        key: (typeof SECTION_STATE_KEYS)[keyof typeof SECTION_STATE_KEYS],
+        key: (typeof SECTION_STATE_KEYS)[keyof typeof SECTION_STATE_KEYS] | "databases",
         value: SectionState<unknown>,
     ): void {
         this.state = { ...this.state, [key]: value } as AdminPanelState;

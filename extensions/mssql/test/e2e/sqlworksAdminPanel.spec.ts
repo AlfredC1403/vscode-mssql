@@ -119,8 +119,12 @@ test.describe("SQLWorks - Panel de administración", () => {
         const server = getServerName();
 
         const panel = await openAdminPanel(page);
-        await expect(panel.getByText("Servidor", { exact: true })).toBeVisible();
-        await expect(panel.getByText("Base de datos", { exact: true })).toBeVisible();
+        // Se buscan como etiquetas de la ficha (`<dt>`), no con getByText: desde M4 «Servidor» y
+        // «Base de datos» son además los nombres de los dos grupos de pestañas.
+        await expect(panel.getByRole("term").filter({ hasText: "Servidor" }).first()).toBeVisible();
+        await expect(
+            panel.getByRole("term").filter({ hasText: "Base de datos" }).first(),
+        ).toBeVisible();
 
         // Los valores se comprueban en su fila (`<dd>`), no con getByText a secas: el servidor y
         // la base también salen en la línea de contexto de la cabecera, y habría dos coincidencias.
@@ -141,15 +145,23 @@ test.describe("SQLWorks - Panel de administración", () => {
         // abrir un segundo panel deja dos iframes `.webview` y el localizador deja de ser único.
         // ------------------------------------------------------------------
 
-        /** Abre una pestaña y espera a que su contenido esté leído. */
-        const openTab = async (name: string) => {
-            await panel.getByRole("tab", { name }).click();
+        /**
+         * Abre una pestaña y espera a que su contenido esté leído.
+         *
+         * Se busca dentro de su grupo porque los dos grupos tienen pestañas con el mismo nombre:
+         * «Permisos» es de servidor y de base de datos.
+         */
+        const openTab = async (group: "Servidor" | "Base de datos", name: string) => {
+            await panel
+                .getByRole("tablist", { name: group })
+                .getByRole("tab", { name, exact: true })
+                .click();
             // La sección se lee al abrirla; mientras, la vista muestra el indicador de carga.
             await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
         };
 
         // --- Logins (§8.1): el login sembrado, su tipo y su rol de servidor ---
-        await openTab("Logins");
+        await openTab("Servidor", "Logins");
         await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible({
             timeout: 60_000,
         });
@@ -163,7 +175,7 @@ test.describe("SQLWorks - Panel de administración", () => {
         ).toBeVisible();
 
         // --- Roles de servidor (§8.2): roles fijos con sus miembros ---
-        await openTab("Roles de servidor");
+        await openTab("Servidor", "Roles de servidor");
         await expect(panel.getByRole("gridcell", { name: "sysadmin" })).toBeVisible({
             timeout: 60_000,
         });
@@ -172,7 +184,7 @@ test.describe("SQLWorks - Panel de administración", () => {
         await expect(panel.getByRole("gridcell", { name: /##MS_/ })).toHaveCount(0);
 
         // --- Permisos de servidor (§8.3) ---
-        await openTab("Permisos");
+        await openTab("Servidor", "Permisos");
         await expect(panel.getByRole("gridcell", { name: "CONNECT SQL" }).first()).toBeVisible({
             timeout: 60_000,
         });
@@ -184,7 +196,7 @@ test.describe("SQLWorks - Panel de administración", () => {
         ).toBeVisible();
 
         // --- Propiedades de la instancia (§8.4) ---
-        await openTab("Instancia");
+        await openTab("Servidor", "Instancia");
         await expect(panel.getByText("Collation", { exact: true })).toBeVisible({
             timeout: 60_000,
         });
@@ -199,7 +211,7 @@ test.describe("SQLWorks - Panel de administración", () => {
         await expect(panel.getByText("Rutas", { exact: true })).toBeVisible();
 
         // --- Sesiones activas (§8.5) ---
-        await openTab("Sesiones");
+        await openTab("Servidor", "Sesiones");
         // La propia sesión del panel tiene que aparecer marcada.
         await expect(panel.getByText("Esta sesión").first()).toBeVisible({ timeout: 60_000 });
         await expect(panel.getByRole("gridcell", { name: /ParityDb/ }).first()).toBeVisible();
@@ -232,10 +244,97 @@ test.describe("SQLWorks - Panel de administración", () => {
         await expect(dialog).toBeHidden();
 
         // --- El buscador de la rejilla filtra ---
-        await openTab("Logins");
+        await openTab("Servidor", "Logins");
         const search = panel.getByRole("textbox", { name: /Buscar por nombre/ });
         await search.fill("parity");
         await expect(panel.getByRole("gridcell", { name: "parity_user" })).toBeVisible();
         await expect(panel.getByRole("gridcell", { name: "sa", exact: true })).toHaveCount(0);
+
+        // ------------------------------------------------------------------
+        // M4: seguridad de la base de datos seleccionada, en solo lectura.
+        // ------------------------------------------------------------------
+
+        // El selector de bases arranca en la base de la conexión.
+        const databasePicker = panel.getByRole("combobox", {
+            name: "Base de datos que se administra",
+        });
+        // El `Dropdown` de Fluent es un botón con role combobox, no un input: se mira su texto.
+        await expect(databasePicker).toContainText("ParityDb");
+
+        // --- Usuarios (§8.3.1): el usuario con login, el usuario sin login y sus roles ---
+        await openTab("Base de datos", "Usuarios");
+        // `parity_user` sale dos veces en la misma fila: como usuario y como login del servidor,
+        // que es justo lo que significa un usuario asignado a un login del mismo nombre.
+        await expect(panel.getByRole("gridcell", { name: "parity_user" }).first()).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByRole("gridcell", { name: "parity_user" })).toHaveCount(2);
+        // `analista` se creó WITHOUT LOGIN: sale sin login y con esquema por omisión `ventas`.
+        await expect(panel.getByRole("gridcell", { name: "analista" })).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: /ventas_supervisores/ })).toBeVisible();
+        // Los cuatro usuarios que crea SQL Server van marcados.
+        await expect(panel.getByRole("gridcell", { name: /dbo/ }).first()).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: /sistema/ }).first()).toBeVisible();
+
+        // --- Roles de base (§8.3.2): fijos, propios, y un rol miembro de otro ---
+        await openTab("Base de datos", "Roles");
+        await expect(panel.getByRole("gridcell", { name: "ventas_lectores" })).toBeVisible({
+            timeout: 60_000,
+        });
+        await expect(panel.getByRole("gridcell", { name: "db_owner" })).toBeVisible();
+        // ventas_supervisores es miembro de ventas_lectores: eso es lo que da la herencia.
+        await expect(
+            panel
+                .getByRole("row")
+                .filter({ hasText: "ventas_lectores" })
+                .filter({ hasText: "ventas_supervisores" }),
+        ).toBeVisible();
+
+        // --- Esquemas (§8.3.3): propietario y número de objetos ---
+        await openTab("Base de datos", "Esquemas");
+        const ventasSchemaRow = panel.getByRole("row").filter({ hasText: "ventas" }).first();
+        await expect(ventasSchemaRow).toBeVisible({ timeout: 60_000 });
+        await expect(ventasSchemaRow.getByRole("gridcell", { name: "dbo" })).toBeVisible();
+        await expect(panel.getByRole("gridcell", { name: /sys/ }).first()).toBeVisible();
+
+        // --- Matriz de permisos (§10): lo propio, lo heredado y la cadena de roles ---
+        await openTab("Base de datos", "Permisos");
+        const principalPicker = panel.getByRole("combobox", { name: "Principal" });
+        await expect(principalPicker).toBeVisible({ timeout: 60_000 });
+
+        await principalPicker.click();
+        await panel.getByRole("option", { name: "analista", exact: true }).click();
+
+        // analista -> ventas_supervisores -> ventas_lectores: un salto y dos saltos.
+        await expect(
+            panel.getByRole("row").filter({ hasText: "INSERT" }).filter({ hasText: "ventas" }),
+        ).toContainText("Hereda de ventas_supervisores");
+        await expect(
+            panel.getByRole("row").filter({ hasText: "SELECT" }).filter({ hasText: "ventas" }),
+        ).toContainText("Hereda de ventas_supervisores, que hereda de ventas_lectores");
+        // CONNECT es propio, no heredado.
+        await expect(panel.getByRole("row").filter({ hasText: "CONNECT" }).first()).toContainText(
+            "Propio",
+        );
+
+        // parity_user tiene un DENY propio a nivel de columna, y el SELECT heredado del esquema.
+        await principalPicker.click();
+        await panel.getByRole("option", { name: "parity_user", exact: true }).click();
+        const denyRow = panel.getByRole("row").filter({ hasText: "ventas.Cliente" });
+        await expect(denyRow).toContainText("Denegado");
+        await expect(denyRow, "el DENY es sobre una columna").toContainText("Email");
+        await expect(
+            panel.getByRole("row").filter({ hasText: "SELECT" }).filter({ hasText: "Esquema" }),
+        ).toContainText("Hereda de ventas_lectores");
+
+        // --- Cambiar de base recarga las secciones de base, no las del servidor ---
+        await openTab("Base de datos", "Esquemas");
+        await expect(panel.getByRole("gridcell", { name: "ventas", exact: true })).toBeVisible();
+        await databasePicker.click();
+        await panel.getByRole("option", { name: "master", exact: true }).click();
+        await expect(panel.getByText("Leyendo del servidor…")).toBeHidden({ timeout: 90_000 });
+        // `ventas` es de ParityDb: en master no está.
+        await expect(panel.getByRole("gridcell", { name: "ventas", exact: true })).toHaveCount(0);
+        await expect(panel.getByRole("gridcell", { name: "dbo", exact: true })).toBeVisible();
     });
 });

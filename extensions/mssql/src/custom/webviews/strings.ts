@@ -39,6 +39,25 @@ export const WebviewStrings = {
             serverPermissions: "Permisos",
             instance: "Instancia",
             sessions: "Sesiones",
+            users: "Usuarios",
+            databaseRoles: "Roles",
+            schemas: "Esquemas",
+            databasePermissions: "Permisos",
+        },
+        /** Las pestañas van en dos grupos: lo que es de la instancia y lo que es de una base. */
+        groups: {
+            server: "Servidor",
+            database: "Base de datos",
+        },
+        databaseSelector: {
+            label: "Base de datos que se administra",
+            loading: "Leyendo bases…",
+            error: "No se pudieron leer las bases de datos.",
+            /** Se marca así la base que no se puede abrir con este login. */
+            noAccess: "sin acceso",
+            system: "sistema",
+            /** Aviso de que cambiar de base aquí no cambia la conexión del editor. */
+            hint: "Cambia solo lo que muestra el panel. La conexión del editor de consultas no se toca.",
         },
         fields: {
             server: "Servidor",
@@ -196,5 +215,100 @@ export const WebviewStrings = {
         killAllowedByProcessAdmin: "Permitido: eres processadmin.",
         killAllowedByPermission: "Permitido: tienes ALTER ANY CONNECTION.",
         killWarning: "Pide confirmación y muestra la sentencia antes de ejecutar nada.",
+    },
+    users: {
+        searchPlaceholder: "Buscar por usuario, login, esquema o rol…",
+        empty: "La base de datos no tiene usuarios visibles para esta conexión.",
+        columns: {
+            name: "Usuario",
+            type: "Tipo",
+            loginName: "Login del servidor",
+            defaultSchema: "Esquema por omisión",
+            authentication: "Autenticación",
+            roles: "Roles de base",
+        },
+        types: {
+            SQL_USER: "Usuario SQL",
+            WINDOWS_USER: "Usuario de Windows",
+            WINDOWS_GROUP: "Grupo de Windows",
+            EXTERNAL_USER: "Usuario externo",
+            EXTERNAL_GROUP: "Grupo externo",
+            ASYMMETRIC_KEY_USER: "Clave asimétrica",
+            CERTIFICATE_USER: "Certificado",
+            OTHER: "Otro",
+        },
+        authentication: {
+            INSTANCE: "Login del servidor",
+            DATABASE: "Contenida en la base",
+            WINDOWS: "Windows",
+            NONE: "Sin login",
+        },
+        /** Usuario sin login asignado: no puede iniciar sesión, solo existe dentro de la base. */
+        noLogin: "—",
+        systemUser: "sistema",
+        legend: "Los usuarios del sistema (dbo, guest, sys, INFORMATION_SCHEMA) van marcados.",
+    },
+    databaseRoles: {
+        searchPlaceholder: "Buscar por rol o miembro…",
+        empty: "La base de datos no tiene roles visibles.",
+        columns: {
+            name: "Rol",
+            kind: "Tipo",
+            owner: "Propietario",
+            memberCount: "Miembros",
+            members: "Quiénes",
+        },
+        fixed: "Fijo",
+        userDefined: "De usuario",
+        /** `public`: existe en toda base de datos y no se puede borrar. */
+        builtIn: "Predefinido",
+        applicationRole: "De aplicación",
+        /** Los roles de aplicación no tienen miembros: se activan con contraseña. */
+        applicationRoleNote: "Se activa con contraseña, no tiene miembros",
+        legend: "Un rol puede ser miembro de otro: la herencia se resuelve en la matriz de permisos.",
+    },
+    schemas: {
+        searchPlaceholder: "Buscar por esquema o propietario…",
+        empty: "La base de datos no tiene esquemas visibles.",
+        columns: {
+            name: "Esquema",
+            owner: "Propietario",
+            objectCount: "Objetos",
+        },
+        systemSchema: "sistema",
+        legend: "Marcados los esquemas de SQL Server y los de los roles fijos.",
+    },
+    permissionMatrix: {
+        principalLabel: "Principal",
+        principalPlaceholder: "Elige un usuario o rol",
+        userGroup: "Usuarios",
+        roleGroup: "Roles",
+        empty: "Este principal no tiene ningún permiso, ni propio ni heredado.",
+        noPrincipal: "Elige un usuario o un rol para ver qué puede hacer y por qué.",
+        columns: {
+            permission: "Permiso",
+            securable: "Sobre",
+            state: "Estado",
+            origin: "Cómo lo obtiene",
+        },
+        classes: {
+            DATABASE: "La base de datos",
+            OBJECT_OR_COLUMN: "Objeto",
+            SCHEMA: "Esquema",
+            DATABASE_PRINCIPAL: "Usuario o rol",
+            TYPE: "Tipo",
+            OTHER: "Otro objeto",
+        },
+        /** Origen del permiso: propio, o la cadena de roles por la que llega. */
+        direct: "Propio",
+        inherited: (chain: string) => `Hereda de ${chain}`,
+        /** Une la cadena de roles: «supervisores, que hereda de lectores». */
+        chainSeparator: ", que hereda de ",
+        conflict: "En conflicto",
+        conflictTooltip:
+            "El mismo permiso llega concedido por un camino y denegado por otro. DENY gana.",
+        counts: (total: number, inherited: number) =>
+            `${total} permisos efectivos, ${inherited} heredados`,
+        legend: "Resuelve la herencia por pertenencia a roles, incluida la de public. No resuelve la jerarquía de objetos: un DENY sobre una columna sale como fila aparte del GRANT sobre el esquema.",
     },
 } as const;

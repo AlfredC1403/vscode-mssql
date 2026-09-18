@@ -26,6 +26,11 @@ export interface AdminPanelContextProps extends CoreRPCs {
      * mostrando la sentencia** antes de ejecutar: desde aquí no se ejecuta nada directamente.
      */
     killSession: (sessionId: number) => void;
+    /**
+     * Cambia la base que administran las secciones de base. **No cambia la conexión**: solo el
+     * nombre con el que el host construye las consultas de catálogo.
+     */
+    selectDatabase: (database: string) => void;
 }
 
 const AdminPanelContext = createContext<AdminPanelContextProps | undefined>(undefined);
@@ -45,6 +50,8 @@ const AdminPanelStateProvider: React.FC<{ children: React.ReactNode }> = ({ chil
                 extensionRpc.action("selectSection", { section }),
             loadSection: (section: AdminSection) => extensionRpc.action("loadSection", { section }),
             killSession: (sessionId: number) => extensionRpc.action("killSession", { sessionId }),
+            selectDatabase: (database: string) =>
+                extensionRpc.action("selectDatabase", { database }),
         }),
         [extensionRpc],
     );

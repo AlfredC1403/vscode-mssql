@@ -36,6 +36,12 @@ export const Strings = {
             `No hay una conexión abierta contra ${server}. Conéctate desde el explorador de objetos y vuelve a abrir el panel.`,
         /** Salvaguarda: el webview pidió una sección que el host no conoce. */
         unknownSection: "El panel pidió una sección que no existe.",
+        /**
+         * Salvaguarda de la regla 11.2: el nombre de la base entra en el texto de la consulta, así
+         * que si no pasa la validación no se consulta nada. El mensaje no repite el nombre.
+         */
+        invalidDatabaseName:
+            "El nombre de la base de datos seleccionada no es válido para SQL Server, así que no se consultó nada.",
     },
     /**
      * Terminación de sesiones. Es la primera operación del fork que **escribe** en el servidor, así

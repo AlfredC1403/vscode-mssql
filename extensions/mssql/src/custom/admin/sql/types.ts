@@ -93,6 +93,135 @@ export interface InstanceProperties {
     startTime: string;
 }
 
+/** Una base de datos, para el selector del panel (§8.3 del brief). */
+export interface DatabaseChoice {
+    name: string;
+    /** `true` para `master`, `model`, `msdb` y `tempdb`. */
+    system: boolean;
+    /** `false` si el login no puede entrar: se muestra, pero no se puede seleccionar. */
+    accessible: boolean;
+    owner: string;
+}
+
+/** Tipo de un usuario de base de datos. */
+export type DatabaseUserKind =
+    | "SQL_USER"
+    | "WINDOWS_USER"
+    | "WINDOWS_GROUP"
+    | "EXTERNAL_USER"
+    | "EXTERNAL_GROUP"
+    | "ASYMMETRIC_KEY_USER"
+    | "CERTIFICATE_USER"
+    | "OTHER";
+
+/** Un usuario de base de datos (§8.3.1 del brief). */
+export interface DatabaseUser {
+    name: string;
+    type: DatabaseUserKind;
+    /** Login del servidor al que está asignado. Vacío en los usuarios sin login. */
+    loginName: string;
+    defaultSchema: string;
+    /** `INSTANCE`, `DATABASE` (usuario contenido), `WINDOWS` o `NONE`. */
+    authentication: string;
+    createDate: string;
+    /** `true` en `dbo`, `guest`, `sys` e `INFORMATION_SCHEMA`. */
+    system: boolean;
+    /** Roles de base a los que pertenece directamente. */
+    roles: string[];
+}
+
+/** Un rol de base de datos (§8.3.2 del brief). */
+export interface DatabaseRole {
+    name: string;
+    /** `true` en los roles fijos (`db_owner`, `db_datareader`…). */
+    fixed: boolean;
+    /**
+     * `true` en `public`, que el catálogo no marca como fijo pero tampoco lo creó nadie: existe en
+     * toda base de datos y no se puede borrar.
+     */
+    builtIn: boolean;
+    /** `true` si es un rol de aplicación, que lleva contraseña y no tiene miembros. */
+    applicationRole: boolean;
+    owner: string;
+    createDate: string;
+    members: string[];
+}
+
+/** Un esquema con su propietario (§8.3.3 del brief). */
+export interface SchemaInfo {
+    name: string;
+    owner: string;
+    /** `true` en `dbo`, `sys`, `INFORMATION_SCHEMA`, `guest` y los de los roles fijos. */
+    system: boolean;
+    objectCount: number;
+}
+
+/** Clase del objeto sobre el que cae un permiso de base de datos. */
+export type DatabaseSecurableClass =
+    | "DATABASE"
+    | "OBJECT_OR_COLUMN"
+    | "SCHEMA"
+    | "DATABASE_PRINCIPAL"
+    | "TYPE"
+    | "OTHER";
+
+/** Un permiso **explícito** de base de datos, tal como lo guarda el catálogo. */
+export interface DatabasePermission {
+    grantee: string;
+    granteeType: string;
+    permission: string;
+    state: PermissionGrantState;
+    stateDescription: string;
+    securableClass: DatabaseSecurableClass;
+    /** Nombre del objeto. Vacío cuando el permiso es sobre la base entera. */
+    securable: string;
+    /** Columna, cuando el permiso es a nivel de columna. Vacío si no. */
+    columnName: string;
+}
+
+/** Pertenencia directa de un principal a un rol de base. */
+export interface RoleMembership {
+    role: string;
+    member: string;
+    memberType: string;
+}
+
+/**
+ * Todo lo que la matriz de permisos necesita para calcularse: los permisos explícitos, las
+ * pertenencias a roles y la lista de principales que se pueden consultar.
+ *
+ * Va en un solo bloque porque la matriz no se puede calcular con una parte: sin las pertenencias no
+ * hay herencia que resolver, y mostrarla a medias sería peor que no mostrarla.
+ */
+export interface PermissionMatrixData {
+    permissions: DatabasePermission[];
+    memberships: RoleMembership[];
+    users: { name: string; system: boolean }[];
+    roles: { name: string; fixed: boolean }[];
+}
+
+/**
+ * Un permiso **efectivo** de un principal: lo que puede hacer de verdad, venga de donde venga
+ * (§10 del brief).
+ */
+export interface EffectivePermission {
+    principal: string;
+    permission: string;
+    securableClass: DatabaseSecurableClass;
+    securable: string;
+    columnName: string;
+    /** Estado que gana. `DENY` gana siempre sobre `GRANT`. */
+    state: PermissionGrantState;
+    /**
+     * Cadena de roles por la que llega, del más cercano al más lejano. **Vacía si es directo.**
+     * `["ventas_supervisores", "ventas_lectores"]` se lee «por ser miembro de supervisores, que es
+     * miembro de lectores».
+     */
+    via: string[];
+    /** `true` si el mismo permiso llega concedido por un camino y denegado por otro. */
+    conflict: boolean;
+}
+
 /** Una sesión activa (§8.5 del brief). */
 export interface ActiveSession {
     sessionId: number;

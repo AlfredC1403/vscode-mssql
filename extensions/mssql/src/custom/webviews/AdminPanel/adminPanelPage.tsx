@@ -23,6 +23,11 @@ import { ServerRolesView } from "./serverRolesView";
 import { ServerPermissionsView } from "./serverPermissionsView";
 import { InstanceView } from "./instanceView";
 import { SessionsView } from "./sessionsView";
+import { UsersView } from "./usersView";
+import { DatabaseRolesView } from "./databaseRolesView";
+import { SchemasView } from "./schemasView";
+import { PermissionMatrixView } from "./permissionMatrixView";
+import { DatabasePicker } from "./databasePicker";
 import { WebviewStrings as Loc } from "../strings";
 import {
     AdminSection,
@@ -37,6 +42,21 @@ const useStyles = makeStyles({
     },
     tabs: {
         flexShrink: 0,
+    },
+    tabGroup: {
+        display: "flex",
+        alignItems: "center",
+        gap: "10px",
+        flexWrap: "wrap",
+        width: "100%",
+    },
+    groupLabel: {
+        fontSize: "11px",
+        fontWeight: 600,
+        letterSpacing: "0.03em",
+        textTransform: "uppercase",
+        color: "var(--vscode-descriptionForeground)",
+        minWidth: "96px",
     },
     content: {
         width: "100%",
@@ -93,13 +113,25 @@ function buildOverviewSections(target: ConnectionTarget): PropertySection[] {
     ];
 }
 
-const TAB_ORDER: { section: AdminSection; label: string }[] = [
+/**
+ * Las pestañas van en dos grupos, y no es decoración: el primero lee de la instancia y el segundo
+ * de la base seleccionada. Con diez pestañas en una fila no se sabría qué depende del selector de
+ * base y qué no.
+ */
+const SERVER_TABS: { section: AdminSection; label: string }[] = [
     { section: AdminSection.Overview, label: Loc.adminPanel.tabs.overview },
     { section: AdminSection.Logins, label: Loc.adminPanel.tabs.logins },
     { section: AdminSection.ServerRoles, label: Loc.adminPanel.tabs.serverRoles },
     { section: AdminSection.ServerPermissions, label: Loc.adminPanel.tabs.serverPermissions },
     { section: AdminSection.Instance, label: Loc.adminPanel.tabs.instance },
     { section: AdminSection.Sessions, label: Loc.adminPanel.tabs.sessions },
+];
+
+const DATABASE_TABS: { section: AdminSection; label: string }[] = [
+    { section: AdminSection.Users, label: Loc.adminPanel.tabs.users },
+    { section: AdminSection.DatabaseRoles, label: Loc.adminPanel.tabs.databaseRoles },
+    { section: AdminSection.Schemas, label: Loc.adminPanel.tabs.schemas },
+    { section: AdminSection.DatabasePermissions, label: Loc.adminPanel.tabs.databasePermissions },
 ];
 
 export const AdminPanelPage = () => {
@@ -148,18 +180,38 @@ export const AdminPanelPage = () => {
                 </MessageBar>
             )}
 
-            <TabList
-                className={styles.tabs}
-                selectedValue={section}
-                onTabSelect={(_, data) => context.selectSection(data.value as AdminSection)}
-                size="small"
-                aria-label={Loc.adminPanel.sectionsAriaLabel}>
-                {TAB_ORDER.map((tab) => (
-                    <Tab key={tab.section} value={tab.section}>
-                        {tab.label}
-                    </Tab>
-                ))}
-            </TabList>
+            <div className={styles.tabGroup}>
+                <span className={styles.groupLabel}>{Loc.adminPanel.groups.server}</span>
+                <TabList
+                    className={styles.tabs}
+                    selectedValue={section}
+                    onTabSelect={(_, data) => context.selectSection(data.value as AdminSection)}
+                    size="small"
+                    aria-label={Loc.adminPanel.groups.server}>
+                    {SERVER_TABS.map((tab) => (
+                        <Tab key={tab.section} value={tab.section}>
+                            {tab.label}
+                        </Tab>
+                    ))}
+                </TabList>
+            </div>
+
+            <div className={styles.tabGroup}>
+                <span className={styles.groupLabel}>{Loc.adminPanel.groups.database}</span>
+                <DatabasePicker />
+                <TabList
+                    className={styles.tabs}
+                    selectedValue={section}
+                    onTabSelect={(_, data) => context.selectSection(data.value as AdminSection)}
+                    size="small"
+                    aria-label={Loc.adminPanel.groups.database}>
+                    {DATABASE_TABS.map((tab) => (
+                        <Tab key={tab.section} value={tab.section}>
+                            {tab.label}
+                        </Tab>
+                    ))}
+                </TabList>
+            </div>
 
             <div className={styles.content}>
                 {section === AdminSection.Overview &&
@@ -180,6 +232,10 @@ export const AdminPanelPage = () => {
                 {section === AdminSection.ServerPermissions && <ServerPermissionsView />}
                 {section === AdminSection.Instance && <InstanceView />}
                 {section === AdminSection.Sessions && <SessionsView />}
+                {section === AdminSection.Users && <UsersView />}
+                {section === AdminSection.DatabaseRoles && <DatabaseRolesView />}
+                {section === AdminSection.Schemas && <SchemasView />}
+                {section === AdminSection.DatabasePermissions && <PermissionMatrixView />}
             </div>
         </PanelShell>
     );

@@ -77,6 +77,11 @@ la constante, así que un renombrado posterior no los vuelve a romper.
 **M3 no añadió ni una línea de producto al upstream**: solo una línea de configuración de build
 (`tsconfig.webviews.json`). Todo lo demás vive en `src/custom/`.
 
+**M4 no añadió ninguna, ni de producto ni de configuración.** El código que tienen que compartir el
+host y el webview —el formato de duraciones y el cálculo de la herencia de permisos— vive en
+`src/custom/sharedInterfaces/`, que ya está en los dos `tsconfig` desde M2. Es el mismo sitio donde
+el upstream pone sus funciones puras compartidas.
+
 ### Archivos nuevos, que no generan conflicto
 
 | Archivo                                                       | Para qué                                                   |
@@ -659,8 +664,20 @@ docker run -d --name mssql-parity \
 
 La base de prueba (`ParityDb`) lleva dos tablas con clave ajena e índice, una vista, un
 procedimiento, un esquema propio (`ventas`), un login y usuario `parity_user`, un rol
-`ventas_lectores` con `GRANT SELECT` de esquema, y un **`DENY` a nivel de columna** —
-el escenario que M4 necesita para probar la matriz de permisos.
+`ventas_lectores` con `GRANT SELECT` de esquema, y un **`DENY` a nivel de columna**
+(`ventas.Cliente`, columna `Email`).
+
+Para M4 se añadió una **cadena de herencia de dos saltos**, que es lo que la matriz de permisos
+tiene que resolver:
+
+```
+analista  →  ventas_supervisores  →  ventas_lectores
+                  INSERT en ventas        SELECT en ventas
+```
+
+`ventas_supervisores` es un rol **miembro de otro rol**, y `analista` es un usuario sin login
+(`CREATE USER analista WITHOUT LOGIN`), que además comprueba la columna «sin login» de la sección de
+usuarios.
 
 Dos arneses distintos:
 
@@ -1512,3 +1529,163 @@ commitea porque depende de Docker; lo que queda fijado en la suite es todo lo de
 **Nota sobre el diálogo en el test e2e:** los modales de VS Code son ventanas nativas del sistema y
 Playwright no las ve, así que el perfil del test fija `window.dialogStyle: "custom"`. Es solo del
 entorno de pruebas; en uso normal el diálogo es el nativo del sistema operativo.
+
+---
+
+## 21. Seguridad de la base de datos en solo lectura (M4)
+
+Cuatro secciones nuevas —usuarios, roles de base, esquemas y la matriz de permisos— y un selector
+de base de datos en la cabecera. Sigue sin escribir nada: todo son `SELECT`.
+
+### 21.1. Sin `USE`: nombre de tres partes
+
+**El panel comparte la conexión con el editor de consultas del usuario.** Un `USE [otra_base]`
+cambiaría la base activa de esa conexión, y el usuario se encontraría sus consultas ejecutándose
+contra otra base sin haber tocado nada. Así que las cinco consultas de M4 llegan al catálogo de la
+base seleccionada con **nombre de tres partes**:
+
+```sql
+FROM [ParityDb].sys.database_principals AS p
+```
+
+Comprobado contra SQL Server 2022 desde `master`: el catálogo de otra base se lee entero sin cambiar
+de contexto, incluidos `sys.database_permissions`, `sys.database_role_members`, `sys.schemas`,
+`sys.objects`, `sys.columns` y `sys.types`.
+
+Dos funciones **no** sirven aquí, y era fácil no darse cuenta:
+
+- `SCHEMA_NAME(id)` y `OBJECT_NAME(id)` resuelven en la base activa de la conexión, no en la que se
+  está leyendo. Cada clase de permiso resuelve su nombre con un `JOIN` al catálogo de la base
+  correcta. (`OBJECT_NAME(id, DB_ID(N'base'))` sí funciona, pero entonces el nombre de la base entra
+  como literal de cadena, y el `JOIN` no necesita eso.)
+- `HAS_PERMS_BY_NAME` depende del contexto, así que no se usa en las consultas de base.
+
+El test unitario lo fija: ninguna de las cinco sentencias contiene `USE `, y todas contienen
+`[ParityDb].sys.`.
+
+### 21.2. `identifiers.ts`: por fin hay identificadores
+
+El nombre de la base entra en el texto de la consulta, y ahí es donde aparece la regla 11.2 del
+brief: `src/custom/util/identifiers.ts`.
+
+- Patrón cerrado del brief: empieza por letra o `_`, hasta 128 caracteres, y admite letras, dígitos,
+  `_`, `@`, `$`, `#`, barra invertida, espacio y guion.
+- **Regla aparte para `DOMINIO\usuario`**: exactamente una barra, con nombre a los dos lados. El
+  dominio admite espacios (`NT AUTHORITY\SYSTEM`) y la cuenta admite además el punto
+  (`CONTOSO\ana.perez`).
+- **Se valida y se aborta**, nunca se escapa a mano. Los tests rechazan los cuatro casos que el
+  brief nombra: corchete de cierre (`Ventas]`), comilla simple (`O'Brien`), punto y coma
+  (`Ventas; DROP DATABASE Ventas`) y doble guion (`Ventas--`).
+- Lo que pasa se envuelve entre corchetes, como `QUOTENAME`.
+- **El mensaje de error no repite el valor rechazado** (regla 11.3): puede venir de un servidor de
+  producción y acabar en un registro. Hay un test que lo comprueba.
+
+Dos detalles que salieron de escribir los tests:
+
+1. El patrón del brief admite el guion, así que `Ventas--` **pasaba**. Un doble guion abre un
+   comentario en T-SQL, así que se descarta aparte del patrón.
+2. Se rechazan los espacios al principio y al final: `[ Ventas]` no es `[Ventas]`, y ese fallo es de
+   los que cuesta ver.
+
+Consecuencia asumida y documentada en el propio archivo: SQL Server admite nombres que aquí se
+rechazan, como `[raro]]nombre]`. Para lo que administra este panel el patrón sobra, y aceptarlos
+obligaría a mantener un escapador propio, que es lo que el brief prohíbe.
+
+### 21.3. La herencia se calcula aquí, no en el servidor
+
+`sharedInterfaces/permissionMatrix.ts` resuelve qué puede hacer un principal y **por qué**. Reglas
+del motor que implementa:
+
+1. Un principal hereda de sus roles, **y de los roles de esos roles**: la pertenencia es transitiva.
+2. **Todos los usuarios pertenecen a `public`, y el catálogo no lo dice**: `sys.database_role_members`
+   no trae esa fila. Sin añadirla, los permisos de `public` no aparecerían en nadie.
+3. **`DENY` gana siempre sobre `GRANT`**, venga por donde venga.
+4. Con varios caminos al mismo permiso, la explicación que se muestra es la del que gana, y entre
+   esos, la más corta. Recorrido en anchura, así que la cadena es la mínima.
+5. Un ciclo de pertenencias no puede existir en SQL Server, pero el conjunto de visitados lo soporta
+   sin colgarse. Hay test.
+
+**Esto responde la duda que quedó abierta en §18.4.** El `effectivePermissions` del API Object
+Management volvió vacío para un permiso heredado de un rol, tanto en el sondeo de M0 como al
+comprobarlo ahora, así que la herencia se resuelve sobre `sys.database_permissions` y
+`sys.database_role_members`, que son los catálogos que sí la contienen. El §10 del brief ya lo
+preveía.
+
+La matriz se calcula en el **webview** y no en el host, porque se recalcula al cambiar de principal y
+hacerlo en el host costaría un viaje de ida y vuelta por cada clic. Vive en `sharedInterfaces/`, que
+ya está en los dos `tsconfig`: **cero líneas nuevas del upstream**, igual que `duration.ts`. No
+contiene T-SQL, así que el §16.5 del brief sigue cumpliéndose.
+
+**Desviación consciente:** el brief pide una «matriz». Una rejilla de permisos × objetos es
+ilegible en una base con cientos de objetos, así que la forma es: se elige un principal y se ve una
+fila por permiso efectivo, con su objeto, su estado y **cómo lo obtiene** («Propio», «Hereda de
+ventas_supervisores, que hereda de ventas_lectores»). La información es la de la matriz; la forma es
+la que se puede leer.
+
+**Límite que la leyenda dice en pantalla:** resuelve la herencia por roles, no la jerarquía de
+objetos. Un `DENY` sobre una columna sale como fila aparte del `GRANT` sobre el esquema, en lugar de
+fundirse en una sola fila «denegado». Es lo que muestran los catálogos, y esconderlo sería peor.
+
+### 21.4. Lo que cambió al correr las consultas contra un servidor real
+
+**`public` tiene cientos de `GRANT SELECT` sobre vistas del sistema.** La primera versión de la
+consulta de permisos traía más de 200 filas de ruido (`sysquery_store_runtime_stats_2017`,
+`external_governance_classifications`…) y ninguna útil. El filtro obvio —`is_ms_shipped = 0`— **no
+funciona**: esas vistas viven en la base de recursos y no están en `sys.objects` de la base, así que
+el `LEFT JOIN` las dejaba pasar. El filtro que sirve es exigir que el objeto **exista** en
+`sys.objects` cuando la clase es 1. Con eso, `ParityDb` pasa de 200 y pico filas a nueve, que son
+exactamente las que muestra SSMS.
+
+**El rol `public` tiene `is_fixed_role = 0`**, así que la primera versión lo etiquetaba «De
+usuario». No lo creó nadie y no se puede borrar: es el principal 0 de toda base. Ahora se trae
+`principal_id` y se etiqueta «Predefinido».
+
+**El `DENY` sembrado es a nivel de columna** (`ventas.Cliente`, columna `Email`), no de tabla. La
+consulta resuelve la columna con `sys.columns` cuando `minor_id > 0`, y la matriz lo muestra como
+`Objeto: ventas.Cliente (Email)`.
+
+### 21.5. Selector de base de datos
+
+En la cabecera del grupo de pestañas de base. Lo que hace y lo que no:
+
+- Lista las bases **en línea** de `sys.databases`, con las del sistema al final.
+- Una base a la que el login no puede entrar (`HAS_DBACCESS` = 0) **se muestra deshabilitada** en
+  lugar de desaparecer: que exista y no se pueda abrir también es información.
+- Al cambiar de base, las cuatro secciones de base vuelven a «sin leer» y se relee **solo la
+  visible**. Las secciones de servidor no se tocan: no dependen de la base.
+- **No cambia la conexión.** El tooltip lo dice, porque es lo que alguien esperaría de un selector de
+  bases en una herramienta de SQL.
+
+El nombre se valida **dos veces**: al guardarlo en el estado y al construir cada consulta. Si no
+pasa, no se consulta nada y la sección muestra el motivo.
+
+### 21.6. Verificación
+
+| Comprobación                      | Resultado                                                         |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `npm run build -- --target mssql` | ✅                                                                |
+| `npm run lint -- --target mssql`  | ✅                                                                |
+| `npm test -- --target mssql`      | ✅ **5206 pasan, 0 fallan**                                       |
+| Tests propios nuevos              | ✅ 11 de identificadores, 12 de los mapeadores, 14 de la herencia |
+| Las cinco consultas               | ✅ ejecutadas contra SQL Server 2022 real (§21.4)                 |
+| Interfaz                          | ✅ en `test/e2e/sqlworksAdminPanel.spec.ts`                       |
+
+Lo que el e2e fija con datos reales, sobre la cadena sembrada
+`analista → ventas_supervisores → ventas_lectores`:
+
+- **Usuarios**: `parity_user` con su login del servidor, `analista` sin login y con
+  `ventas_supervisores`, y los cuatro usuarios del sistema marcados.
+- **Roles**: `ventas_lectores` con dos miembros, uno de ellos **otro rol**.
+- **Esquemas**: `ventas` con propietario `dbo`.
+- **Matriz**: `INSERT` sobre el esquema `ventas` como «Hereda de ventas_supervisores», `SELECT` como
+  «Hereda de ventas_supervisores, que hereda de ventas_lectores», `CONNECT` como «Propio», y el
+  `DENY` de `parity_user` sobre la columna `Email`.
+- **Selector**: cambiar a `master` recarga la sección y `ventas` desaparece de la lista de esquemas.
+
+### 21.7. Lo que M4 deliberadamente no hace
+
+- **No escribe.** Crear, modificar o borrar usuarios, roles y esquemas es M5, con vista previa del
+  script, confirmación y transacción explícita.
+- **No muestra permisos de objeto uno por uno.** La matriz parte de los permisos **explícitos** del
+  catálogo; los objetos sin permiso explícito no aparecen, porque no hay nada que contar de ellos.
+- **No resuelve la jerarquía de objetos** (§21.3), y lo dice en pantalla.
