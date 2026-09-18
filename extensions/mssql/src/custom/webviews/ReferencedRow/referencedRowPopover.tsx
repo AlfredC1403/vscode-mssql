@@ -40,10 +40,11 @@ import { WebviewStrings as Strings } from "../strings";
 const useStyles = makeStyles({
     surface: {
         padding: 0,
-        maxWidth: "460px",
-        minWidth: "280px",
-        maxHeight: "60vh",
-        overflow: "auto",
+        // Ancho acotado por la ventana, no por el número de columnas: una tabla de treinta campos
+        // tiene que caber igual que una de tres, desplazándose de lado (ver `body`).
+        maxWidth: "min(720px, 92vw)",
+        minWidth: "260px",
+        overflow: "hidden",
     },
     header: {
         display: "flex",
@@ -51,10 +52,7 @@ const useStyles = makeStyles({
         gap: "8px",
         padding: "8px 8px 8px 12px",
         borderBottom: "1px solid var(--vscode-panel-border, var(--vscode-editorWidget-border))",
-        position: "sticky",
-        top: 0,
         backgroundColor: "var(--vscode-editorWidget-background, var(--vscode-editor-background))",
-        zIndex: 1,
     },
     headerText: {
         display: "flex",
@@ -75,28 +73,49 @@ const useStyles = makeStyles({
         overflow: "hidden",
         textOverflow: "ellipsis",
     },
+    /**
+     * El registro va **en horizontal**, como una fila de rejilla, y se desplaza de lado.
+     *
+     * En vertical —una línea por campo— una tabla de treinta columnas convertía el globo en una
+     * columna larguísima que tapaba los resultados y obligaba a desplazarse hacia abajo para ver el
+     * final. Así la altura es siempre la misma, dos líneas, y lo que crece es el ancho, que está
+     * acotado por la ventana.
+     */
     body: {
-        padding: "6px 0",
+        display: "flex",
+        overflowX: "auto",
+        overflowY: "hidden",
+        // Sin esto, un flex dentro de un contenedor con ancho máximo no se deja encoger y el
+        // desbordamiento se va hacia fuera en lugar de convertirse en desplazamiento.
+        minWidth: 0,
     },
-    row: {
-        display: "grid",
-        gridTemplateColumns: "minmax(90px, 40%) 1fr",
-        gap: "10px",
-        alignItems: "baseline",
-        padding: "3px 12px",
+    column: {
+        display: "flex",
+        flexDirection: "column",
+        gap: "2px",
+        padding: "7px 10px",
+        // Ni tan estrecha que no se lea el nombre, ni tan ancha que un texto largo se coma el globo.
+        minWidth: "84px",
+        maxWidth: "220px",
+        flexShrink: 0,
+        borderRight: "1px solid var(--vscode-panel-border, var(--vscode-editorWidget-border))",
     },
-    rowMatch: {
+    columnMatch: {
         backgroundColor: "var(--vscode-list-inactiveSelectionBackground, transparent)",
     },
     label: {
         color: "var(--vscode-descriptionForeground)",
-        fontSize: "12px",
-        overflowWrap: "anywhere",
+        fontSize: "11px",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
     },
     value: {
         fontFamily: "var(--vscode-editor-font-family, monospace)",
         fontSize: "12px",
-        overflowWrap: "anywhere",
+        whiteSpace: "nowrap",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
     },
     null: {
         color: "var(--vscode-descriptionForeground)",
@@ -255,21 +274,33 @@ export const ReferencedRowPopover: React.FC<ReferencedRowPopoverProps> = ({ stat
                     </div>
                 ) : state.result.status === "ok" ? (
                     <div className={styles.body}>
-                        {state.result.fields.map((field) => (
-                            <div
-                                key={field.name}
-                                className={`${styles.row} ${field.isMatch ? styles.rowMatch : ""}`}>
-                                <Text className={styles.label}>{field.name}</Text>
-                                <Text
-                                    className={`${styles.value} ${field.isNull ? styles.null : ""}`}>
-                                    {field.isNull
-                                        ? "NULL"
-                                        : field.value === ""
-                                          ? "''"
-                                          : field.value}
-                                </Text>
-                            </div>
-                        ))}
+                        {state.result.fields.map((field) => {
+                            const shown = field.isNull
+                                ? "NULL"
+                                : field.value === ""
+                                  ? "''"
+                                  : field.value;
+                            return (
+                                <div
+                                    key={field.name}
+                                    className={`${styles.column} ${
+                                        field.isMatch ? styles.columnMatch : ""
+                                    }`}>
+                                    <Text className={styles.label} title={field.name}>
+                                        {field.name}
+                                    </Text>
+                                    {/* `title` con el valor entero: la celda lo recorta, y el
+                                        valor completo tiene que poder verse sin ensanchar nada. */}
+                                    <Text
+                                        className={`${styles.value} ${
+                                            field.isNull ? styles.null : ""
+                                        }`}
+                                        title={shown}>
+                                        {shown}
+                                    </Text>
+                                </div>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className={styles.reason}>{reasonFor(state.result)}</div>

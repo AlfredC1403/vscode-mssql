@@ -3497,7 +3497,32 @@ clic** (`OpenCell`), así que un comando del menú de celda no sabía sobre qué
 Ahora el menú lo lleva. Son seis líneas y un helper, y es un arreglo del componente, no un parche: un
 menú _de celda_ que no sabe su celda es un hueco suyo.
 
-### 31.5. Cuando no hay registro que enseñar
+### 31.5. El registro va en horizontal, no en vertical
+
+La primera versión listaba los campos uno por línea, como una hoja de propiedades. Con la tabla de
+prueba —tres columnas— se veía bien; con una tabla real no.
+
+Una tabla de treinta columnas convierte esa lista en una columna larguísima que tapa los resultados y
+obliga a desplazarse hacia abajo dentro del globo para llegar al final. Y las tablas de un tablero
+tienen treinta columnas.
+
+Así que el registro se pinta **como una fila de rejilla**: nombre arriba, valor debajo, campos uno al
+lado del otro, y desplazamiento lateral. La altura es siempre la misma, dos líneas, tenga la tabla
+tres columnas o cuarenta; lo que crece es el ancho, acotado a `min(720px, 92vw)` para que el globo no
+se salga de la ventana.
+
+Dos detalles que hacen falta para que eso se lea:
+
+- **Cada campo se recorta con puntos suspensivos** y lleva el valor entero en el `title`, así que un
+  `NVARCHAR(400)` no ensancha el globo pero se puede ver pasando el ratón.
+- **`minWidth: 0` en el contenedor.** Sin eso, un flex dentro de un contenedor con ancho máximo no se
+  deja encoger: el contenido se desborda hacia fuera en lugar de convertirse en desplazamiento, que
+  es exactamente el fallo que se quería evitar.
+
+Comprobado con la tabla referenciada ampliada a 13 columnas: el globo mantiene su altura, aparece la
+barra lateral, y a la derecha se llega a `Descripcion`, `CreadoPor` y `ModificadoEn`.
+
+### 31.6. Cuando no hay registro que enseñar
 
 Nunca se queda en blanco ni «no hace nada». Cada final dice qué pasó:
 
@@ -3512,7 +3537,7 @@ Nunca se queda en blanco ni «no hace nada». Cada final dice qué pasó:
 Con una clave compuesta **no se consulta nada**: adivinar las otras columnas sería enseñar una fila
 que quizá no es la que apunta.
 
-### 31.6. Verificación
+### 31.7. Verificación
 
 | Qué                                        | Estado                                         |
 | ------------------------------------------ | ---------------------------------------------- |
@@ -3529,7 +3554,7 @@ con valor 2, «Ver registro referenciado», y el globo sale sobre la celda con `
 Coste en deuda de merge: **ninguna línea del upstream sustituida**. Cuatro archivos suyos con
 añadidos marcados con `// [FORK]`.
 
-### 31.7. Lo que esto deliberadamente no hace
+### 31.8. Lo que esto deliberadamente no hace
 
 - **No navega en cadena.** El globo enseña la fila y se cierra; no permite saltar desde ahí a la
   siguiente clave ajena. Es lo siguiente que pediría cualquiera, pero ata el diseño a un historial y
