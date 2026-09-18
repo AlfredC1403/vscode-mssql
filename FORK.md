@@ -696,24 +696,37 @@ Dos arneses distintos:
 
 ### 13.2. Resultado sobre el fork sin modificar (commit `752692d`)
 
-| #   | Comprobación                                                          | Estado | Evidencia                                                                                 |
-| --- | --------------------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------- |
-| 1   | Conectar con autenticación SQL                                        | ✅     | e2e `connection.spec.ts` + arnés: SQL Server 16.0.4295.3, Developer Edition               |
-| 1b  | Conectar con autenticación integrada                                  | ❌     | **No verificable aquí**: requiere Windows y un dominio Kerberos                           |
-| 2   | Explorador: servidor, base, tablas, vistas, procedimientos, seguridad | ✅     | arnés: árbol completo expandido, incluidas columnas con tipo y PK                         |
-| 3   | IntelliSense sugiere tablas y columnas reales                         | ✅     | arnés: `ventas.` → `Cliente`, `Pedido`, `vPedidoCliente`                                  |
-| 4   | Ejecutar consulta: resultados, mensajes, varios conjuntos             | ✅     | arnés: 2 conjuntos + 3 mensajes (`PRINT` y los dos «rows affected»)                       |
-| 5   | Exportar a CSV y a JSON                                               | ✅     | arnés: `query/saveCsv` y `query/saveJson`, contenido comprobado                           |
-| 6   | Script as Create sobre tabla y sobre procedimiento                    | ✅     | arnés: `CREATE TABLE [ventas].[Cliente]` y `CREATE PROCEDURE [ventas].[ObtenerPedidos]`   |
-| 7   | Plan de ejecución estimado                                            | ✅     | e2e `executionPlan.spec.ts`: 12 tests (zoom, tooltips, propiedades, XML, buscar nodo)     |
-| 8   | Historial de consultas                                                | ⚠️     | `queryHistoryProvider.test.js`: 10 tests unitarios en verde. Sin comprobación de interfaz |
+| #   | Comprobación                                                          | Estado | Evidencia                                                                               |
+| --- | --------------------------------------------------------------------- | ------ | --------------------------------------------------------------------------------------- |
+| 1   | Conectar con autenticación SQL                                        | ✅     | e2e `connection.spec.ts` + arnés: SQL Server 16.0.4295.3, Developer Edition             |
+| 1b  | Conectar con autenticación integrada                                  | ❌     | **No verificable aquí**: requiere Windows y un dominio Kerberos                         |
+| 2   | Explorador: servidor, base, tablas, vistas, procedimientos, seguridad | ✅     | arnés: árbol completo expandido, incluidas columnas con tipo y PK                       |
+| 3   | IntelliSense sugiere tablas y columnas reales                         | ✅     | arnés: `ventas.` → `Cliente`, `Pedido`, `vPedidoCliente`                                |
+| 4   | Ejecutar consulta: resultados, mensajes, varios conjuntos             | ✅     | arnés: 2 conjuntos + 3 mensajes (`PRINT` y los dos «rows affected»)                     |
+| 5   | Exportar a CSV y a JSON                                               | ✅     | arnés: `query/saveCsv` y `query/saveJson`, contenido comprobado                         |
+| 6   | Script as Create sobre tabla y sobre procedimiento                    | ✅     | arnés: `CREATE TABLE [ventas].[Cliente]` y `CREATE PROCEDURE [ventas].[ObtenerPedidos]` |
+| 7   | Plan de ejecución estimado                                            | ✅     | e2e `executionPlan.spec.ts`: 12 tests (zoom, tooltips, propiedades, XML, buscar nodo)   |
+| 8   | Historial de consultas                                                | ✅     | 10 tests unitarios del upstream + **interfaz comprobada por el usuario en Windows**     |
 
-**Siete de los ocho puntos verificados contra una instancia real.** Los dos huecos:
+**De los nueve puntos, siete se verificaron desde aquí contra una instancia real, el usuario cerró
+el octavo, y uno sigue abierto.** El punto 8 lo comprobó **el usuario en su máquina Windows**: aquí
+solo había cobertura unitaria, porque el historial es una vista de `TreeDataProvider` que no pasa
+por el STS y el arnés no la alcanza. Se anota como lo que es —una comprobación suya, no una medida
+de este entorno— y con eso la fila deja de estar en ⚠️.
 
-- **Autenticación integrada** es un hueco estructural de este entorno, no un fallo del fork.
-  Solo se puede comprobar en la máquina del usuario, que es además donde se usa.
-- **Historial de consultas** tiene cobertura unitaria del upstream pero es una vista de
-  `TreeDataProvider` que no pasa por el STS, así que el arnés no la alcanza.
+Un detalle que juega a favor: esta tabla está acotada al fork **sin modificar** (`752692d`), pero
+esa comprobación se hizo sobre el `.vsix` ya renombrado y empaquetado. Es evidencia **más** fuerte
+que la que pedía la fila, no menos: dice que el historial sigue funcionando _después_ de los
+cambios del fork, no solo antes.
+
+Queda un hueco, y es el mismo de siempre:
+
+- **Autenticación integrada (1b)** sigue sin verificar: requiere Windows y un dominio Kerberos, así
+  que es un hueco estructural de este entorno y no un fallo conocido del fork. Es **lo único de la
+  lista de paridad que nadie ha ejercitado todavía**, y conviene no perderlo de vista: el renombrado
+  de M1 cambió el identificador de la extensión en cuatro archivos (§15.6), que es justo el tipo de
+  cambio capaz de romper una ruta de autenticación sin que ningún test de aquí lo note. Hasta que
+  alguien la pruebe en un dominio, la paridad del fork es de ocho sobre nueve, no completa.
 
 ### 13.3. Toolchain
 
@@ -936,6 +949,7 @@ usado para enrutar), así que esos tests pasan igual. Cambiarlos sería deuda de
 | Recursos de marca de Microsoft en el paquete               | ✅ ninguno                                                                     |
 | Instalación del `.vsix` en ventana limpia y activación     | ✅ `vsix.spec.ts`, 2 tests                                                     |
 | STS del paquete funcionando **sin `dotnet` en la máquina** | ✅ los 6 puntos del arnés de paridad, contra el binario extraído del `.vsix`   |
+| El `.vsix` de `win-x64` instalado **en Windows de verdad** | ✅ **comprobado por el usuario**: se construye, instala y arranca              |
 
 Los 4 tests nuevos de `telemetryOverride.test.ts` están dentro de los 5107.
 
