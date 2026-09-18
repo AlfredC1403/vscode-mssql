@@ -1,24 +1,24 @@
 {
-    "name": "mssql",
-    "displayName": "SQL Server (mssql)",
-    "version": "1.46.0",
-    "description": "Design and optimize schemas for SQL Server, Azure SQL, and SQL Database in Fabric using a modern, lightweight extension built for developers",
-    "publisher": "ms-mssql",
+    "name": "sqlworks",
+    "displayName": "SQLWorks",
+    "version": "0.1.0",
+    "description": "Cliente de SQL Server con administración de servidores, bases de datos y usuarios, biblioteca de snippets y formateador de T-SQL configurable. Fork interno de vscode-mssql.",
+    "publisher": "alfredc1403",
     "preview": false,
     "license": "SEE LICENSE IN LICENSE.txt",
-    "icon": "images/extensionIcon.png",
+    "icon": "images/sqlworksIcon.png",
     "galleryBanner": {
-        "color": "#2F2F2F",
+        "color": "#12243D",
         "theme": "dark"
     },
     "repository": {
         "type": "git",
-        "url": "https://github.com/Microsoft/vscode-mssql.git"
+        "url": "https://github.com/AlfredC1403/vscode-mssql.git"
     },
     "bugs": {
-        "url": "https://github.com/Microsoft/vscode-mssql/issues"
+        "url": "https://github.com/AlfredC1403/vscode-mssql/issues"
     },
-    "homepage": "https://github.com/Microsoft/vscode-mssql/blob/main/mssql/README.md",
+    "homepage": "https://github.com/AlfredC1403/vscode-mssql/blob/main/FORK.md",
     "engines": {
         "vscode": "^1.105.0"
     },
@@ -27,11 +27,11 @@
         "Azure"
     ],
     "keywords": [
+        "SQLWorks",
         "SQL",
         "MSSQL",
-        "SQL database in Fabric",
-        "Azure SQL Database",
         "SQL Server",
+        "T-SQL",
         "multi-root ready"
     ],
     "activationEvents": [
@@ -48,8 +48,7 @@
     "extensionPack": [
         "ms-mssql.data-workspace-vscode",
         "ms-mssql.sql-database-projects-vscode",
-        "ms-mssql.sql-bindings-vscode",
-        "ms-dotnettools.vscode-dotnet-runtime"
+        "ms-mssql.sql-bindings-vscode"
     ],
     "scripts": {
         "build:runtime-localization": "node ../../scripts/localization-generate.js vscode-mssql .",
@@ -212,7 +211,7 @@
             "activitybar": [
                 {
                     "id": "objectExplorer",
-                    "title": "SQL Server",
+                    "title": "SQLWorks",
                     "icon": "media/server_page_dark.svg"
                 }
             ],
@@ -250,6 +249,13 @@
                     "id": "backgroundTasks",
                     "name": "%extension.backgroundTasks%",
                     "icon": "media/objectTypes/Queue.svg"
+                },
+                {
+                    "id": "sqlworksSnippets",
+                    "name": "Snippets",
+                    "type": "webview",
+                    "icon": "media/objectTypes/StoredProcedure.svg",
+                    "visibility": "collapsed"
                 }
             ]
         },
@@ -615,6 +621,11 @@
                     "command": "mssql.objectExplorerNewQuery",
                     "when": "view == objectExplorer && viewItem =~ /\\btype=(disconnectedServer|Server|Database)\\b/",
                     "group": "1_MSSQL_primary@1"
+                },
+                {
+                    "command": "sqlworks.openAdminPanel",
+                    "when": "view == objectExplorer && viewItem =~ /\\btype=(Server|Database)\\b/",
+                    "group": "9_SQLWORKS@1"
                 },
                 {
                     "command": "mssql.createDatabase",
@@ -1161,6 +1172,30 @@
             ]
         },
         "commands": [
+            {
+                "command": "sqlworks.openAdminPanel",
+                "title": "Administración",
+                "category": "SQLWorks",
+                "icon": "$(shield)"
+            },
+            {
+                "command": "sqlworks.showSnippets",
+                "title": "Mostrar la biblioteca de snippets",
+                "category": "SQLWorks",
+                "icon": "$(symbol-snippet)"
+            },
+            {
+                "command": "sqlworks.openFormatPanel",
+                "title": "Formato de T-SQL: abrir el panel",
+                "category": "SQLWorks",
+                "icon": "$(symbol-ruler)"
+            },
+            {
+                "command": "sqlworks.applyFormatProfile",
+                "title": "Formato de T-SQL: aplicar un perfil",
+                "category": "SQLWorks",
+                "icon": "$(symbol-ruler)"
+            },
             {
                 "command": "mssql.runQuery",
                 "title": "%mssql.runQuery%",
@@ -1885,6 +1920,49 @@
             "type": "object",
             "title": "%mssql.Configuration%",
             "properties": {
+                "sqlworks.format.profiles": {
+                    "type": "object",
+                    "scope": "resource",
+                    "description": "Perfiles de formato de T-SQL con nombre. Cada clave es el nombre del perfil y su valor un objeto con las opciones que se desvían de las de fábrica, usando los nombres cortos de mssql.format.options.* (por ejemplo { \"Compacto\": { \"commaPlacement\": \"leading\", \"keywordCasing\": \"uppercase\" } }). Aplicar un perfil escribe esas opciones en mssql.format.options.*: el fork no sustituye el formateador, lo configura.",
+                    "default": {},
+                    "additionalProperties": {
+                        "type": "object"
+                    }
+                },
+                "sqlworks.snippets.sharedLibraries": {
+                    "type": "array",
+                    "scope": "resource",
+                    "description": "Rutas de bibliotecas de snippets compartidas, para un equipo. Se leen en solo lectura: el panel no las modifica. Se acepta el formato propio de SQLWorks (un array) y el de los archivos de snippets de VS Code (un objeto con el nombre como clave).",
+                    "default": [],
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sqlworks.productionServers": {
+                    "type": "object",
+                    "scope": "application",
+                    "description": "Servidores de producción. SQLWorks los marca en el panel de administración y exige escribir el nombre del objeto antes de ejecutar cualquier cambio. El ámbito es «application» a propósito: así el settings.json de un repositorio no puede desmarcar un servidor de producción.",
+                    "default": {
+                        "connectionIds": [],
+                        "serverPatterns": []
+                    },
+                    "properties": {
+                        "connectionIds": {
+                            "type": "array",
+                            "description": "Identificadores de perfiles de conexión guardados. Es la forma estable de identificar una conexión.",
+                            "items": {
+                                "type": "string"
+                            }
+                        },
+                        "serverPatterns": {
+                            "type": "array",
+                            "description": "Patrones sobre el nombre del servidor, con * como comodín. Para conexiones sin perfil guardado, que no tienen identificador.",
+                            "items": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                },
                 "mssql.enableExperimentalFeatures": {
                     "type": "boolean",
                     "default": false,
@@ -4568,7 +4646,7 @@
             },
             {
                 "name": "mssql_dab",
-                "modelDescription": "Work with the Data API builder configuration in the currently active schema designer. Use 'get_state' to inspect it and 'apply_changes' to modify it; use 'show' only to open the Data API builder view with exactly one of connectionId or connectionName when needed. Operations: 'get_state' returns the current version, summary, and bounded configuration state (full config may be omitted for large configurations); 'apply_changes' uses payload { expectedVersion, targetHint?, changes } and returns the post-mutation version plus summary, with optional returnState control. Mutations require 'expectedVersion'; on mismatch, returns 'stale_state' with the current version and latest summary/config according to returnState. Entity refs are either { id }, { schemaName, tableName } for table compatibility, or { schemaName, sourceName, sourceType } where sourceType is table, view, or stored-procedure. Column refs are either { id } or { name }. Change types: { type: 'set_api_types', apiTypes }, { type: 'add_entity', entity }, { type: 'remove_entity', entity }, { type: 'set_entity_enabled', entity, isEnabled } for legacy all-surface compatibility, { type: 'set_entity_surface', entity, apiType, isEnabled }, { type: 'set_entity_actions', entity, enabledActions } for legacy selected-role compatibility, { type: 'set_entity_permissions', entity, permissions }, { type: 'set_column_exposed', entity, column, isExposed }, { type: 'set_field_metadata', entity, field, alias?, description?, isPrimaryKey? }, { type: 'set_parameter_metadata', entity, parameter, isRequired?, defaultValue?, clearDefault?, description? }, { type: 'set_entity_mcp', entity, enabled?, dmlToolsEnabled?, customToolEnabled? }, { type: 'patch_entity_settings', entity, set }, { type: 'set_only_enabled_entities', entities }, { type: 'set_all_entities_enabled', isEnabled }. patch_entity_settings.set supports entityName, description, authorizationRole, customRestPath, restEnabled, customGraphQLType, customGraphQLSingularType, customGraphQLPluralType, graphQLEnabled, mcpEnabled, mcpDmlToolsEnabled, and stored-procedure-only storedProcedureRestMethods, storedProcedureGraphQLOperation, exposeAsMcpCustomTool, mcpCustomToolEnabled.",
+                "modelDescription": "Work with the Data API builder configuration in the currently active schema designer. Use 'get_state' to inspect it and establish an edit session, then use 'apply_changes' to modify it; use 'show' only to open the Data API builder view with exactly one of connectionId or connectionName when no designer is active. Operations: 'get_state' returns the summary and bounded configuration state (full config may be omitted for large configurations); 'apply_changes' uses payload { targetHint?, changes } and returns the post-mutation summary, with optional returnState control. Concurrency versions are managed internally by the extension and must not be supplied by the caller. If apply_changes returns 'state_required' or 'stale_state', call get_state again on the same active designer and retry; do not call show. Entity refs are either { id }, { schemaName, tableName } for table compatibility, or { schemaName, sourceName, sourceType } where sourceType is table, view, or stored-procedure. Column refs are either { id } or { name }. Change types: { type: 'set_api_types', apiTypes }, { type: 'add_entity', entity }, { type: 'remove_entity', entity }, { type: 'set_entity_enabled', entity, isEnabled } for legacy all-surface compatibility, { type: 'set_entity_surface', entity, apiType, isEnabled }, { type: 'set_entity_actions', entity, enabledActions } for legacy selected-role compatibility, { type: 'set_entity_permissions', entity, permissions }, { type: 'set_column_exposed', entity, column, isExposed }, { type: 'set_field_metadata', entity, field, alias?, description?, isPrimaryKey? }, { type: 'set_parameter_metadata', entity, parameter, isRequired?, defaultValue?, clearDefault?, description? }, { type: 'set_entity_mcp', entity, enabled?, dmlToolsEnabled?, customToolEnabled? }, { type: 'patch_entity_settings', entity, set }, { type: 'set_only_enabled_entities', entities }, { type: 'set_all_entities_enabled', isEnabled }. patch_entity_settings.set supports entityName, description, authorizationRole, customRestPath, restEnabled, customGraphQLType, customGraphQLSingularType, customGraphQLPluralType, graphQLEnabled, mcpEnabled, mcpDmlToolsEnabled, and stored-procedure-only storedProcedureRestMethods, storedProcedureGraphQLOperation, exposeAsMcpCustomTool, mcpCustomToolEnabled.",
                 "tags": [
                     "databases",
                     "mssql",
@@ -4873,15 +4951,10 @@
                             "minLength": 1
                         },
                         "payload": {
-                            "description": "Operation-specific payload. apply_changes: { expectedVersion, targetHint?, changes }. Change types: set_api_types { apiTypes }, add_entity { entity }, remove_entity { entity }, set_entity_enabled { entity, isEnabled }, set_entity_surface { entity, apiType, isEnabled }, set_entity_actions { entity, enabledActions }, set_entity_permissions { entity, permissions }, set_column_exposed { entity, column, isExposed }, set_field_metadata { entity, field, alias?, description?, isPrimaryKey? }, set_parameter_metadata { entity, parameter, isRequired?, defaultValue?, clearDefault?, description? }, set_entity_mcp { entity, enabled?, dmlToolsEnabled?, customToolEnabled? }, patch_entity_settings { entity, set }, set_only_enabled_entities { entities }, set_all_entities_enabled { isEnabled }.",
+                            "description": "Operation-specific payload. apply_changes: { targetHint?, changes }. The extension uses the edit session established by get_state; callers do not provide a version. Change types: set_api_types { apiTypes }, add_entity { entity }, remove_entity { entity }, set_entity_enabled { entity, isEnabled }, set_entity_surface { entity, apiType, isEnabled }, set_entity_actions { entity, enabledActions }, set_entity_permissions { entity, permissions }, set_column_exposed { entity, column, isExposed }, set_field_metadata { entity, field, alias?, description?, isPrimaryKey? }, set_parameter_metadata { entity, parameter, isRequired?, defaultValue?, clearDefault?, description? }, set_entity_mcp { entity, enabled?, dmlToolsEnabled?, customToolEnabled? }, patch_entity_settings { entity, set }, set_only_enabled_entities { entities }, set_all_entities_enabled { isEnabled }.",
                             "title": "Payload",
                             "type": "object",
                             "properties": {
-                                "expectedVersion": {
-                                    "description": "Required for apply_changes. Must match the version returned by the most recent get_state.",
-                                    "type": "string",
-                                    "minLength": 1
-                                },
                                 "targetHint": {
                                     "description": "Optional server+database hint for apply_changes. If provided and it does not match the active designer, the tool fails with reason 'target_mismatch' and applies no changes.",
                                     "type": "object",
@@ -5321,7 +5394,6 @@
                                 }
                             },
                             "required": [
-                                "expectedVersion",
                                 "changes"
                             ],
                             "additionalProperties": false

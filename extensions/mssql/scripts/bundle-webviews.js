@@ -40,6 +40,10 @@ void run(
                 profiler: "src/webviews/pages/Profiler/index.tsx",
                 azureDataStudioMigration: "src/webviews/pages/AzureDataStudioMigration/index.tsx",
                 shortcutsConfiguration: "src/webviews/pages/ShortcutsConfiguration/index.tsx",
+                // [FORK] Único entry point del fork, para siempre: es un router que elige la
+                // vista según el estado que le manda el host. Los paneles nuevos se añaden a ese
+                // router, no a esta lista. Ver FORK.md §16.
+                sqlworks: "src/custom/webviews/index.tsx",
             },
             loader: {
                 ".tsx": "tsx",

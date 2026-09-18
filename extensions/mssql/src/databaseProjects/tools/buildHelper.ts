@@ -42,7 +42,9 @@ export class BuildHelper {
     private initialized: boolean = false;
 
     constructor() {
-        this.extensionDir = vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ?? "";
+        // [FORK] Identificador propio del fork. Ver src/constants/constants.ts.
+        this.extensionDir =
+            vscode.extensions.getExtension("alfredc1403.sqlworks")?.extensionPath ?? "";
         this.extensionBuildDir = path.join(this.extensionDir, buildDirectory);
     }
 

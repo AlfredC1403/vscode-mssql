@@ -1,0 +1,233 @@
+/*---------------------------------------------------------------------------------------------
+ *  Fork interno (SQLWorks). Código propio, no del upstream.
+ *--------------------------------------------------------------------------------------------*/
+
+import {
+    DatabasePermission,
+    EffectivePermission,
+    PermissionGrantState,
+    RoleMembership,
+} from "../admin/sql/types";
+
+/**
+ * Permisos efectivos de un principal: qué puede hacer de verdad, y por qué (§10 del brief).
+ *
+ * **Vive en `sharedInterfaces/` y no en `admin/sql/` porque lo ejecuta el webview**: la matriz se
+ * recalcula al cambiar de principal, y hacerlo en el host obligaría a un viaje de ida y vuelta por
+ * cada clic. Esta carpeta ya está en los dos `tsconfig`, así que compartir código puro no cuesta
+ * ninguna línea del upstream. No contiene T-SQL: el §16.5 del brief sigue cumpliéndose, todo el
+ * T-SQL está en `admin/sql/`.
+ *
+ * **Se calcula aquí y no en el servidor**, y eso es una decisión con motivo. El API Object Management
+ * del SQL Tools Service devuelve un campo `effectivePermissions` que parecía servir, pero en el
+ * sondeo de M0 volvió **vacío** para un permiso que el principal tenía heredado de un rol (ver
+ * FORK.md §18.4). Volver a comprobarlo en M4 confirmó lo mismo. Así que la herencia se resuelve
+ * sobre dos catálogos que sí dicen la verdad, `sys.database_permissions` y
+ * `sys.database_role_members`, con las reglas del motor:
+ *
+ * - Un principal hereda los permisos de los roles a los que pertenece, **y de los roles de esos
+ *   roles**: la pertenencia es transitiva y puede tener varios saltos.
+ * - **Todos los usuarios pertenecen a `public`**, y esa pertenencia **no aparece** en
+ *   `sys.database_role_members`. Hay que añadirla, o los permisos de `public` no se ven en ningún
+ *   principal.
+ * - **`DENY` gana siempre sobre `GRANT`**, venga por donde venga, y sin importar cuál esté más
+ *   cerca.
+ * - `REVOKE` no es un estado guardado: el catálogo no tiene fila cuando un permiso está revocado.
+ */
+
+/** Rol al que pertenece todo usuario de una base de datos, sin que el catálogo lo diga. */
+export const PUBLIC_ROLE = "public";
+
+/** Un origen desde el que llega un permiso: el principal mismo, o una cadena de roles. */
+interface PermissionSource {
+    /** Nombre del principal que tiene el permiso explícito. */
+    holder: string;
+    /** Cadena de roles desde el principal consultado hasta `holder`. Vacía si es él mismo. */
+    via: string[];
+}
+
+/**
+ * Todos los orígenes de permisos de un principal: él mismo y los roles que hereda, con la cadena
+ * por la que llega a cada uno.
+ *
+ * Recorrido en anchura, así que la cadena que se guarda para cada rol es **la más corta**: si un
+ * permiso llega por dos caminos, el que se muestra es el más directo. Los ciclos no pueden existir
+ * en SQL Server, pero el conjunto de visitados los soporta sin colgarse. Función pura.
+ */
+export function collectPermissionSources(
+    principal: string,
+    memberships: RoleMembership[],
+    options: { includePublic?: boolean } = {},
+): PermissionSource[] {
+    const rolesByMember = new Map<string, string[]>();
+    for (const membership of memberships) {
+        const existing = rolesByMember.get(membership.member);
+        if (existing) {
+            existing.push(membership.role);
+        } else {
+            rolesByMember.set(membership.member, [membership.role]);
+        }
+    }
+
+    const sources: PermissionSource[] = [{ holder: principal, via: [] }];
+    const visited = new Set<string>([principal]);
+    const queue: PermissionSource[] = [{ holder: principal, via: [] }];
+
+    // Índice en lugar de `shift()`: así el elemento actual no es opcional para el compilador, y no
+    // hay que afirmar nada que el bucle ya garantiza.
+    for (let index = 0; index < queue.length; index++) {
+        const current = queue[index];
+        for (const role of rolesByMember.get(current.holder) ?? []) {
+            if (visited.has(role)) {
+                continue;
+            }
+            visited.add(role);
+            const source: PermissionSource = { holder: role, via: [...current.via, role] };
+            sources.push(source);
+            queue.push(source);
+        }
+    }
+
+    // `public` no figura en el catálogo de pertenencias, pero lo hereda todo el mundo.
+    if (options.includePublic !== false && !visited.has(PUBLIC_ROLE)) {
+        sources.push({ holder: PUBLIC_ROLE, via: [PUBLIC_ROLE] });
+    }
+
+    return sources;
+}
+
+/** Clave de un permiso concreto sobre un objeto concreto. */
+function permissionKey(permission: DatabasePermission): string {
+    // El separador es un NUL: no puede aparecer dentro de un identificador de SQL Server, así que
+    // dos claves distintas nunca colisionan. Se **construye** con `String.fromCharCode` en lugar de
+    // escribirlo como literal: al escribirlo, `eslint --fix` lo deja como byte crudo en el archivo,
+    // y con un NUL dentro git clasifica el fuente como binario y deja de mostrar sus líneas. Ver
+    // FORK.md §26.7, que es donde se midió. (Ojo: la regla aplica también a este comentario.)
+    return [
+        permission.permission,
+        permission.securableClass,
+        permission.securable,
+        permission.columnName,
+    ].join(String.fromCharCode(0));
+}
+
+/** `DENY` gana sobre todo; `GRANT WITH GRANT OPTION` sobre `GRANT`. */
+function strongerState(
+    left: PermissionGrantState,
+    right: PermissionGrantState,
+): PermissionGrantState {
+    if (left === "DENY" || right === "DENY") {
+        return "DENY";
+    }
+    if (left === "GRANT_WITH_GRANT_OPTION" || right === "GRANT_WITH_GRANT_OPTION") {
+        return "GRANT_WITH_GRANT_OPTION";
+    }
+    if (left === "GRANT" || right === "GRANT") {
+        return "GRANT";
+    }
+    return "REVOKE";
+}
+
+/**
+ * Permisos efectivos de un principal, con su origen.
+ *
+ * Cada permiso sale una sola vez, con el estado que gana y la cadena de roles del origen que lo
+ * explica. Si el mismo permiso llega concedido por un camino y denegado por otro, se marca
+ * `conflict`: el efecto es `DENY`, y merece verse. Función pura.
+ */
+export function computeEffectivePermissions(
+    principal: string,
+    permissions: DatabasePermission[],
+    memberships: RoleMembership[],
+): EffectivePermission[] {
+    const sources = collectPermissionSources(principal, memberships);
+    const viaByHolder = new Map<string, string[]>();
+    for (const source of sources) {
+        // El primero gana: el recorrido en anchura ya llegó por el camino más corto.
+        if (!viaByHolder.has(source.holder)) {
+            viaByHolder.set(source.holder, source.via);
+        }
+    }
+
+    /** Cada permiso, con todos los caminos por los que llega, antes de decidir cuál gana. */
+    interface Candidate {
+        permission: DatabasePermission;
+        via: string[];
+    }
+    const candidates = new Map<string, Candidate[]>();
+
+    for (const permission of permissions) {
+        const via = viaByHolder.get(permission.grantee);
+        if (!via) {
+            continue;
+        }
+        const key = permissionKey(permission);
+        const existing = candidates.get(key);
+        if (existing) {
+            existing.push({ permission, via });
+        } else {
+            candidates.set(key, [{ permission, via }]);
+        }
+    }
+
+    const effective = new Map<string, EffectivePermission>();
+
+    for (const [key, group] of candidates) {
+        const state = group
+            .map((candidate) => candidate.permission.state)
+            .reduce((left, right) => strongerState(left, right));
+
+        // La explicación es la del camino que produce el estado que gana, y entre esos, el más
+        // corto: «lo tiene él» antes que «lo hereda de un rol de un rol».
+        const winner = group
+            .filter((candidate) => candidate.permission.state === state)
+            .sort((a, b) => a.via.length - b.via.length)[0];
+
+        const hasDeny = group.some((candidate) => candidate.permission.state === "DENY");
+        const hasGrant = group.some((candidate) => candidate.permission.state !== "DENY");
+
+        effective.set(key, {
+            principal,
+            permission: winner.permission.permission,
+            securableClass: winner.permission.securableClass,
+            securable: winner.permission.securable,
+            columnName: winner.permission.columnName,
+            state,
+            via: winner.via,
+            conflict: hasDeny && hasGrant,
+        });
+    }
+
+    return [...effective.values()].sort(
+        (a, b) =>
+            a.securableClass.localeCompare(b.securableClass) ||
+            a.securable.localeCompare(b.securable) ||
+            a.permission.localeCompare(b.permission),
+    );
+}
+
+/**
+ * Principales que se pueden consultar en la matriz: usuarios y roles, ordenados con los que no son
+ * del sistema primero. Función pura.
+ */
+export function listMatrixPrincipals(
+    users: { name: string; system: boolean }[],
+    roles: { name: string; fixed: boolean }[],
+): { name: string; kind: "user" | "role"; secondary: boolean }[] {
+    const entries = [
+        ...users.map((user) => ({
+            name: user.name,
+            kind: "user" as const,
+            secondary: user.system,
+        })),
+        ...roles.map((role) => ({
+            name: role.name,
+            kind: "role" as const,
+            secondary: role.fixed,
+        })),
+    ];
+
+    return entries.sort(
+        (a, b) => Number(a.secondary) - Number(b.secondary) || a.name.localeCompare(b.name),
+    );
+}

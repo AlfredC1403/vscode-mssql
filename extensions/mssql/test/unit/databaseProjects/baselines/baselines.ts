@@ -6,6 +6,7 @@
 import * as path from "path";
 import { promises as fs } from "fs";
 import * as vscode from "vscode";
+import { mssqlExtensionId } from "../../../../src/databaseProjects/common/extensionIds";
 
 // Project baselines
 export let newProjectFileBaseline: string;
@@ -34,7 +35,8 @@ export let sqlProjPropertyReadBaseline: string;
 export let databaseReferencesReadBaseline: string;
 
 const baselineFolderPath = path.join(
-    vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ?? "",
+    // [FORK] Desde la constante, no un literal: así el renombrado del fork no rompe el test.
+    vscode.extensions.getExtension(mssqlExtensionId)?.extensionPath ?? "",
     "test",
     "unit",
     "databaseProjects",

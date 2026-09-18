@@ -14,6 +14,9 @@ import * as cp from "child_process";
 import { ElectronApplication, Page } from "@playwright/test";
 import { getVsCodeVersionName } from "./envConfigReader";
 import * as os from "os";
+// [FORK] Para `--folder-uri`: la ruta hay que darla como URI, y `pathToFileURL` la escapa bien
+// (espacios, acentos, y las barras de Windows).
+import { pathToFileURL } from "url";
 
 export type VsCodeAppHandle = ElectronApplication;
 
@@ -21,6 +24,11 @@ export type mssqlExtensionLaunchConfig = {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     initialConfig?: any;
     useVsix?: boolean;
+    // [FORK] Carpeta que se abre como espacio de trabajo. Sin esto VS Code arranca sin carpeta, y
+    // entonces no existen los ámbitos de espacio de trabajo ni de carpeta: no hay forma de
+    // comprobar que un `.vscode/settings.json` NO puede cambiar un ajuste nuestro. Lo usa
+    // `sqlworksSettingScope.spec.ts`. Ver FORK.md §27.
+    workspaceFolder?: string;
 };
 
 export const DEFAULT_USER_CONFIG = {
@@ -136,6 +144,14 @@ export async function launchVsCodeWithMssqlExtension(
         launchArgs.push("--temp-profile");
     }
 
+    // [FORK] Se usa `--folder-uri` y no el argumento suelto con la ruta. Medido: pasando la ruta
+    // como argumento posicional junto a `--temp-profile` y `--extensionDevelopmentPath`, VS Code
+    // arranca con la ventana **vacía** y se la traga sin avisar. `--folder-uri` es explícito y sí
+    // abre la carpeta. Ver el comentario de `workspaceFolder` y FORK.md §27.
+    if (config.workspaceFolder) {
+        launchArgs.push(`--folder-uri=${pathToFileURL(config.workspaceFolder).href}`);
+    }
+
     const shouldRecordVideo =
         process.env.CI && process.env["DISABLE_ELECTRON_VIDEO_RECORDING"] !== "true";
 
@@ -168,7 +184,8 @@ export async function launchVsCodeWithMssqlExtension(
     await page.setViewportSize({ width: 1920, height: 1080 });
 
     // Activate MSSQL tab if not already selected
-    const sqlTab = page.locator('[role="tab"][aria-label^="SQL Server"]');
+    // [FORK] El contenedor de vistas se llama SQLWorks, no "SQL Server". Ver FORK.md §15.1.
+    const sqlTab = page.locator('[role="tab"][aria-label^="SQLWorks"]');
     if ((await sqlTab.getAttribute("aria-selected")) !== "true") {
         const tabLink = sqlTab.locator("a");
         await tabLink.waitFor({ state: "visible", timeout: 30_000 });
@@ -181,10 +198,14 @@ export async function launchVsCodeWithMssqlExtension(
         .first()
         .waitFor({ state: "hidden", timeout: 30_000 });
 
-    await page.locator('[role="treeitem"][aria-label*="Add Connection"]').waitFor({
-        state: "visible",
-        timeout: 30_000,
-    });
+    // [FORK] El upstream esperaba el nodo "Add Connection", que solo existe cuando el árbol está
+    // vacío. Los tests del fork precargan perfiles en settings.json (ver FORK.md §17.3), y
+    // entonces ese nodo no aparece. Basta con esperar a que el árbol de conexiones tenga algo,
+    // que es lo que de verdad indica que el explorador ya está montado.
+    await page
+        .locator('[role="tree"][aria-label="Connections"] [role="treeitem"]')
+        .first()
+        .waitFor({ state: "visible", timeout: 30_000 });
 
     return { electronApp, page, userDataDir, extensionsDir, videoDir };
 }

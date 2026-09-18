@@ -20,5 +20,17 @@
         "composite": false,
         "allowSyntheticDefaultImports": true
     },
-    "include": ["src/webviews", "typings", "src/sharedInterfaces", "media"]
+    // [FORK] src/custom/webviews y src/custom/sharedInterfaces son el equivalente del fork a
+    // src/webviews y src/sharedInterfaces del upstream. `admin/sql/types.ts` son los tipos del
+    // dominio, que el brief (§9) fija en esa ruta y el panel muestra tal cual: no importa nada,
+    // así que compila en los dos lados. Ver FORK.md §16.
+    "include": [
+        "src/webviews",
+        "typings",
+        "src/sharedInterfaces",
+        "media",
+        "src/custom/webviews",
+        "src/custom/sharedInterfaces",
+        "src/custom/admin/sql/types.ts"
+    ]
 }

@@ -18,6 +18,7 @@ import { exists } from "../../../src/databaseProjects/common/utils";
 import MainController from "../../../src/controllers/mainController";
 import { createMssqlInternalApi } from "../../../src/controllers/internalApiFactory";
 import { initializeDatabaseProjectsServices } from "../../../src/databaseProjects/serviceLocator";
+import { mssqlExtensionId } from "../../../src/databaseProjects/common/extensionIds";
 
 let serviceInitialization: Promise<void> | undefined;
 
@@ -27,7 +28,8 @@ export const sqlToolsServiceInitializationTimeoutMs = 120_000;
 
 export function initializeTestServices(): Promise<void> {
     serviceInitialization ??= (async () => {
-        const extension = vscode.extensions.getExtension("ms-mssql.mssql");
+        // [FORK] Desde la constante, no un literal: así el renombrado del fork no rompe el test.
+        const extension = vscode.extensions.getExtension(mssqlExtensionId);
         if (!extension) {
             throw new Error("MSSQL extension is unavailable in the test host");
         }
@@ -72,7 +74,7 @@ export async function shouldThrowSpecificError(
 }
 
 export function getExtensionResourcePath(...segments: string[]): string {
-    const extensionPath = vscode.extensions.getExtension("ms-mssql.mssql")?.extensionPath ?? "";
+    const extensionPath = vscode.extensions.getExtension(mssqlExtensionId)?.extensionPath ?? "";
     return path.join(extensionPath, ...segments);
 }
 

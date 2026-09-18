@@ -5,5 +5,7 @@
         "jsx": "react-jsx"
     },
     "include": ["src", "test", "typings"],
-    "exclude": ["node_modules", "src/webviews"]
+    // [FORK] src/custom/webviews es código de webview del fork y lo compila tsconfig.webviews.json,
+    // igual que src/webviews del upstream. Ver FORK.md §16.
+    "exclude": ["node_modules", "src/webviews", "src/custom/webviews"]
 }

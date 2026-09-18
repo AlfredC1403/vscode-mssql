@@ -42,10 +42,12 @@ export class MssqlProtocolHandler {
         this._logger = logger.withPrefix("Protocol Handler");
     }
 
+    // [FORK] Las dos líneas de ejemplo de abajo llevan el esquema de URI del fork
+    // (`vscode://<publisher>.<name>/`). Ver `src/constants/constants.ts` y FORK.md §15.6.
     /**
      * Handles the given URI and returns connection information if applicable. Examples of URIs handled:
-     * - vscode://ms-mssql.mssql/connect?server=myServer&database=dbName&user=sa&authenticationType=SqlLogin
-     * - vscode://ms-mssql.mssql/connect?connectionString=Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;
+     * - vscode://alfredc1403.sqlworks/connect?server=myServer&database=dbName&user=sa&authenticationType=SqlLogin
+     * - vscode://alfredc1403.sqlworks/connect?connectionString=Server=myServerAddress;Database=myDataBase;User Id=myUsername;Password=myPassword;
      *
      * @param uri - The URI to handle.
      * @returns The connection information or undefined if not applicable.

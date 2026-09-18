@@ -28,6 +28,17 @@ const copyrightNotice =
     "\n" +
     "\n";
 
+// [FORK] Cabecera del código propio del fork. No lleva el aviso de Microsoft porque no es obra
+// suya; atribuírsela sería incorrecto. Ver NOTICE.md.
+const forkNotice =
+    "/*---------------------------------------------------------------------------------------------" +
+    "\n" +
+    " *  Fork interno (SQLWorks). Código propio, no del upstream." +
+    "\n" +
+    " *--------------------------------------------------------------------------------------------*/" +
+    "\n" +
+    "\n";
+
 // Shared rules for all extensions
 const sharedRules = {
     ...eslintPluginPrettierRecommended.rules,
@@ -251,6 +262,23 @@ export default [
             ...sharedRules,
             "custom-eslint-rules/banned-imports": "error",
             "custom-eslint-rules/no-direct-l10n": "error",
+        },
+    },
+
+    // [FORK] Código propio del fork. Va al final para que su cabecera gane sobre sharedRules.
+    {
+        files: [
+            "extensions/mssql/src/custom/**/*.ts",
+            "extensions/mssql/src/custom/**/*.tsx",
+            "extensions/mssql/test/unit/custom/**/*.ts",
+        ],
+        rules: {
+            "notice/notice": [
+                "error",
+                {
+                    template: forkNotice,
+                },
+            ],
         },
     },
 ];

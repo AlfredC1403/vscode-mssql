@@ -1,0 +1,105 @@
+/*---------------------------------------------------------------------------------------------
+ *  Fork interno (SQLWorks). Código propio, no del upstream.
+ *--------------------------------------------------------------------------------------------*/
+
+/**
+ * Contraseñas: la ranura en la sentencia, y las reglas que las hacen seguras (regla 11.3 del brief).
+ *
+ * ## Por qué hay una ranura y no una cadena
+ *
+ * Medido contra SQL Server 2022 (FORK.md §23.1): **`CREATE LOGIN ... WITH PASSWORD = @variable` es un
+ * error de sintaxis (102)**. El DDL de SQL Server no acepta parámetros para la contraseña, así que
+ * tiene que ir como **literal** dentro del texto. Y `query/simpleexecute` del STS solo recibe una
+ * cadena: no hay forma de enviar un parámetro por separado. Las dos cosas juntas significan que la
+ * contraseña **va en el texto que se envía**, y no hay diseño que lo evite.
+ *
+ * Lo que sí se puede evitar es todo lo demás, y es lo que hace este módulo:
+ *
+ * 1. La contraseña **no entra en el estado del webview** ni en el objeto del plan. La sentencia lleva
+ *    un marcador (`@@SECRETO@@`), y el valor real solo existe en una variable local del host durante
+ *    la llamada que ejecuta.
+ * 2. La **vista previa muestra el marcador de posición**, no el valor. El lote se construye dos
+ *    veces: una para mirar y otra para ejecutar, con la misma función y distinto secreto.
+ * 3. El **escapado del nivel interior lo hace el motor**, con `QUOTENAME(@secreto, '''')`. No se
+ *    escapa a mano dentro de la sentencia, que es lo que la regla 11.2 prohíbe. Medido: con una
+ *    contraseña que lleva comilla simple, corchete de cierre, punto y coma, salto de línea y `GO`,
+ *    el login se crea y `PWDCOMPARE` con la original devuelve 1.
+ *
+ * ## El límite de 128 no es cosmético
+ *
+ * Medido: `CREATE LOGIN` con una contraseña de **129 caracteres o más no crea el login y no da
+ * ningún error**. 127 y 128 funcionan; 129 y 130 no hacen nada, silenciosamente. El lote informaría
+ * «aplicado» y no habría login. El informe del motor no puede detectarlo, así que **se valida aquí y
+ * se aborta**: es la única barrera posible.
+ */
+
+/** Marcador que ocupa el sitio de la contraseña en el `sql` de una sentencia. Sin comillas. */
+export const SECRET_MARKER = "@@SECRETO@@";
+
+/** Lo que se muestra en el sitio del secreto cuando el lote se construye para mirar. */
+export const SECRET_PLACEHOLDER = "<contraseña>";
+
+/**
+ * Longitud máxima de una contraseña de SQL Server, medida.
+ *
+ * Por encima de esto `CREATE LOGIN` no hace nada y no avisa, así que el generador aborta.
+ */
+export const MAX_SECRET_LENGTH = 128;
+
+/** Una sentencia necesita una contraseña: qué pedir y para qué. */
+export interface SecretRequirement {
+    /** Texto de la caja de entrada: «Contraseña del login ventas_app». */
+    prompt: string;
+    /** El objeto al que pertenece, para el aviso de la vista previa. */
+    subject: string;
+}
+
+/**
+ * Comprueba que una contraseña se puede meter en el lote sin perder nada.
+ *
+ * Devuelve el motivo si no vale, o `undefined` si está bien. **No devuelve la contraseña en el
+ * mensaje**, ni su longitud real, ni un fragmento: un mensaje de error acaba en pantalla y podría
+ * acabar en un registro. Función pura.
+ */
+export function validateSecret(secret: string): string | undefined {
+    if (typeof secret !== "string" || secret.length === 0) {
+        return "La contraseña está vacía.";
+    }
+    if (secret.length > MAX_SECRET_LENGTH) {
+        // El motor no avisa de esto: crearía el login a medias, o más bien no lo crearía y diría
+        // que sí. Ver el comentario de cabecera.
+        return `La contraseña supera los ${MAX_SECRET_LENGTH} caracteres que admite SQL Server. Por encima de eso el servidor no crea el login y **no devuelve ningún error**, así que no se envía nada.`;
+    }
+    // El NUL se **construye** con `String.fromCharCode`, no se escribe como literal: al
+    // escribirlo, `eslint --fix` lo deja como byte crudo, y con un NUL dentro git clasifica
+    // el fuente como binario y deja de mostrar sus líneas. Ver FORK.md §26.7.
+    if (secret.includes(String.fromCharCode(0))) {
+        // Un NUL corta el literal en el cliente nativo y la contraseña que se guardaría no sería la
+        // que se escribió. Abortar, no recortar.
+        return "La contraseña lleva un carácter nulo, que no sobrevive al envío.";
+    }
+    return undefined;
+}
+
+/**
+ * Escapa la contraseña para el literal `N'...'` del `DECLARE` del lote.
+ *
+ * Aquí **sí** se dobla la comilla, y no contradice la regla 11.2: esto es un literal de cadena en el
+ * nivel más externo del lote, no una sentencia ni un identificador, y es el único nivel que hay que
+ * escapar porque del interior se encarga `QUOTENAME` en el propio motor.
+ *
+ * @throws Si la contraseña no pasa `validateSecret`. Quien llama tiene que haberla validado.
+ */
+export function escapeSecretLiteral(secret: string): string {
+    const problem = validateSecret(secret);
+    if (problem) {
+        // El mensaje no lleva la contraseña, y quien captura esto tampoco la registra.
+        throw new Error(problem);
+    }
+    return secret.replace(/'/g, "''");
+}
+
+/** Cuántas veces aparece el marcador en un texto. */
+export function countSecretMarkers(sql: string): number {
+    return sql.split(SECRET_MARKER).length - 1;
+}
