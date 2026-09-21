@@ -27,6 +27,8 @@ export type PendingChangeKind =
     | "resetPassword"
     | "dropLogin"
     | "createUser"
+    // M10: usuario contenido, con su propia contraseña, en una base con contención.
+    | "createContainedUser"
     | "createServerRole"
     | "createDatabaseRole"
     | "dropServerRole"

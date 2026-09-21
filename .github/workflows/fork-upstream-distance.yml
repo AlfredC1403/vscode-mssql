@@ -1,0 +1,48 @@
+# Fork interno (SQLWorks). Archivo nuevo: no toca ningún workflow del upstream.
+#
+# Mide la distancia con el upstream y **no integra nada**. El punto 3 del §12 de FORK.md fija un
+# merge cada tres meses y el aviso de debajo reconoce que puede ser demasiado; lo que decide de
+# verdad es cuántos de los commits nuevos tocan los archivos de la tabla del §0, porque son los
+# únicos que pueden dar conflicto. Eso es lo que imprime.
+name: Fork - distancia con el upstream
+
+on:
+  schedule:
+    # Los lunes a las 6:00 UTC. Semanal y no mensual porque el upstream se mueve rápido: entre
+    # v1.42.2 y 1.46.0 entró un motor de lenguaje SQL nuevo (§12).
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+
+jobs:
+  distance:
+    name: Medir
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Necesita la historia entera: mide desde el commit del upstream que declara FORK.md.
+          fetch-depth: 0
+
+      - name: Node.js
+        uses: ./.github/actions/setup-node
+
+      - name: Traer el upstream
+        run: |
+          git remote add upstream https://github.com/microsoft/vscode-mssql.git || true
+          git fetch --quiet upstream main
+
+      - name: Medir
+        # Sale con 0 haya o no commits nuevos: esto informa, no vigila. Lo que interesa está en
+        # el resumen del job, que es lo que se lee sin abrir el log.
+        run: |
+          {
+            echo '## Distancia con el upstream'
+            echo
+            echo '```'
+            node scripts/fork/upstream-distance.mjs
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

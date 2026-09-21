@@ -5,6 +5,7 @@
 import { expect } from "chai";
 
 import {
+    buildCreateContainedUserStatement,
     buildCreateDatabaseRoleStatement,
     buildCreateLoginStatement,
     buildCreateServerRoleStatement,
@@ -14,6 +15,7 @@ import {
     buildResetPasswordStatement,
 } from "../../../src/custom/admin/sql/ddl/createPrincipals";
 import { validateStatement } from "../../../src/custom/admin/sql/ddl/plan";
+import { databaseIsContained } from "../../../src/custom/admin/sql/ddl/preconditions";
 import { SECRET_MARKER } from "../../../src/custom/admin/sql/ddl/secrets";
 
 /**
@@ -167,6 +169,96 @@ suite("Fork: CREATE USER", () => {
                 defaultSchema: "mal'esquema",
             }),
         ).to.throw();
+    });
+});
+
+suite("Fork: CREATE USER contenido", () => {
+    test("la contraseña y el esquema van en la misma lista WITH, separados por coma", () => {
+        // Es la diferencia de sintaxis que obliga a tener un generador aparte: en el `CREATE USER
+        // ... FOR LOGIN` el `WITH DEFAULT_SCHEMA` es su propia cláusula, y aquí no.
+        const statement = buildCreateContainedUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+            defaultSchema: "ventas",
+        });
+
+        expect(statement.sql).to.equal(
+            "CREATE USER [ventas_app] WITH PASSWORD = @@SECRETO@@, DEFAULT_SCHEMA = [ventas]",
+        );
+        expect(statement.database).to.equal("Ventas");
+        assertValid(statement);
+    });
+
+    test("sin esquema, solo la contraseña", () => {
+        const statement = buildCreateContainedUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+        });
+
+        expect(statement.sql).to.equal("CREATE USER [ventas_app] WITH PASSWORD = @@SECRETO@@");
+        assertValid(statement);
+    });
+
+    test("declara la ranura de contraseña, que es lo que lo distingue del otro CREATE USER", () => {
+        const contained = buildCreateContainedUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+        });
+        const normal = buildCreateUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+            source: { kind: "withoutLogin" },
+        });
+
+        expect(contained.secret).to.not.equal(undefined);
+        expect(contained.sql.split(SECRET_MARKER)).to.have.length(2);
+        expect(normal.secret).to.equal(undefined);
+    });
+
+    test("la contraseña no viaja en el objeto: solo la ranura y qué pedir", () => {
+        // La misma invariante de M6, comprobada también aquí: si algún día alguien añadiera un
+        // campo con el valor, este test lo vería.
+        const statement = buildCreateContainedUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+        });
+
+        // La sentencia lleva la ranura, y la ranura lleva **qué pedir**, no el valor: si alguien
+        // añadiera un campo con la contraseña dentro, estas dos listas de claves lo verían.
+        expect(Object.keys(statement).sort()).to.deep.equal(["database", "label", "secret", "sql"]);
+        expect(Object.keys(statement.secret ?? {}).sort()).to.deep.equal(["prompt", "subject"]);
+        expect(statement.secret?.prompt).to.include("ventas_app");
+    });
+
+    test("aborta si la base o el esquema no pasan la validación del 11.2", () => {
+        expect(() =>
+            buildCreateContainedUserStatement({ name: "ventas_app", database: "Ventas'; DROP" }),
+        ).to.throw();
+        expect(() =>
+            buildCreateContainedUserStatement({
+                name: "ventas_app",
+                database: "Ventas",
+                defaultSchema: "ventas]--",
+            }),
+        ).to.throw();
+    });
+
+    test("la precondición mira la contención, y pasa la validación del plan", () => {
+        const statement = buildCreateContainedUserStatement({
+            name: "ventas_app",
+            database: "Ventas",
+        });
+        statement.precondition = databaseIsContained("Ventas");
+
+        expect(statement.precondition.check).to.include("sys.databases");
+        expect(statement.precondition.check).to.include("containment <> 0");
+        // El nombre entra como literal, entrecomillado por `quoteLiteral`, no interpolado.
+        expect(statement.precondition.check).to.include("N'Ventas'");
+        assertValid(statement);
+    });
+
+    test("la precondición aborta con un nombre que no pasa la validación", () => {
+        expect(() => databaseIsContained("Ventas'; DROP DATABASE X --")).to.throw();
     });
 });
 

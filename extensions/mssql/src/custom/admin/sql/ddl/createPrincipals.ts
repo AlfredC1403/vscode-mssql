@@ -146,9 +146,10 @@ export interface NewUser {
 /**
  * `CREATE USER [nombre] FOR LOGIN [login]` o `... WITHOUT LOGIN`.
  *
- * No admite contraseña: un usuario **contenido** (con su propia contraseña) es otro tipo de objeto y
- * solo existe en bases con `CONTAINMENT = PARTIAL`, que este panel no gestiona. Si algún día se
- * añade, será una función aparte con su propia ranura, no un parámetro opcional aquí.
+ * No admite contraseña. Un usuario **contenido** (con su propia contraseña) es otro tipo de objeto,
+ * y desde M10 lo construye `buildCreateContainedUserStatement`, **una función aparte con su propia
+ * ranura**, que es como el §23.3 dijo que se haría si se añadía. No es un parámetro opcional aquí a
+ * propósito: las dos formas de `CREATE USER` no comparten ni cláusulas ni precondición.
  *
  * @throws Si algún identificador no pasa la validación.
  */
@@ -172,6 +173,67 @@ export function buildCreateUserStatement(user: NewUser): PlannedStatement {
                 : `Crear el usuario ${user.name} sin login`,
         sql: `CREATE USER ${name} ${clauses.join(" ")}`,
         database: assertIdentifier(user.database, "nombre de base de datos"),
+    };
+}
+
+/** Datos de un usuario **contenido** nuevo. La contraseña **no** viaja aquí. */
+export interface NewContainedUser {
+    name: string;
+    /** La base de datos contenida. No puede ser `master`: allí no hay contención posible. */
+    database: string;
+    /** Esquema por omisión. Vacío deja `dbo`. */
+    defaultSchema?: string;
+}
+
+/**
+ * `CREATE USER [nombre] WITH PASSWORD = <ranura>` en una base contenida (M10).
+ *
+ * ## Qué es, y en qué se diferencia del otro `CREATE USER`
+ *
+ * Un usuario contenido **se autentica contra la base de datos**, no contra el servidor: no tiene
+ * login detrás y no aparece en `sys.server_principals`. Es lo que hace portátil una base contenida,
+ * y por eso es un objeto distinto y no una opción del otro generador.
+ *
+ * Las dos diferencias que obligan a separarlos:
+ *
+ * 1. **Tiene ranura de contraseña** y el otro no, con todo lo que eso arrastra (regla 11.3).
+ * 2. **La sintaxis de las cláusulas no es la misma**: aquí `DEFAULT_SCHEMA` va dentro de la misma
+ *    lista `WITH` que `PASSWORD`, separada por coma; en `CREATE USER ... FOR LOGIN` el
+ *    `WITH DEFAULT_SCHEMA` es su propia cláusula.
+ *
+ * ## La precondición no es opcional
+ *
+ * SQL Server solo acepta esta sentencia si la base tiene la contención activada. Según la
+ * documentación de Microsoft, en una base no contenida responde con el **error 33233**, «You can
+ * only create a user with a password in a contained database». Ese número **no está medido contra
+ * un motor** como el resto de los que aparecen en este archivo, así que aquí no se depende de él:
+ * la precondición `databaseIsContained` comprueba `sys.databases.containment` **dentro de la
+ * transacción** y, si la base dejó de estar contenida entre que se pintó la lista y se ejecutó, el
+ * lote se revierte entero con un motivo legible en lugar de con un error del motor.
+ *
+ * La pone quien monta el cambio (`stageChange.ts`), igual que las demás.
+ *
+ * @throws Si algún identificador no pasa la validación.
+ */
+export function buildCreateContainedUserStatement(user: NewContainedUser): PlannedStatement {
+    const name = quoteIdentifier(user.name, "usuario contenido");
+    // `PASSWORD` primero y `DEFAULT_SCHEMA` después, en la misma lista y separadas por coma: es la
+    // forma que acepta el motor para esta variante.
+    const clauses = [`PASSWORD = ${SECRET_MARKER}`];
+    if (user.defaultSchema) {
+        clauses.push(
+            `DEFAULT_SCHEMA = ${quoteIdentifier(user.defaultSchema, "esquema por omisión")}`,
+        );
+    }
+
+    return {
+        label: `Crear el usuario contenido ${user.name}`,
+        sql: `CREATE USER ${name} WITH ${clauses.join(", ")}`,
+        database: assertIdentifier(user.database, "nombre de base de datos"),
+        secret: {
+            prompt: `Contraseña del usuario contenido ${user.name}`,
+            subject: `el usuario contenido ${user.name}`,
+        },
     };
 }
 

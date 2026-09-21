@@ -282,6 +282,15 @@ export type StageChangeRequest =
           login?: string;
           defaultSchema?: string;
       }
+    | {
+          /**
+           * M10: usuario contenido. No lleva `login` **por definición**: un usuario contenido se
+           * autentica contra la base, así que no hay login al que asignarlo.
+           */
+          kind: "createContainedUser";
+          user: string;
+          defaultSchema?: string;
+      }
     | { kind: "createServerRole"; role: string; owner?: string }
     | { kind: "createDatabaseRole"; role: string; owner?: string }
     | { kind: "dropServerRole"; role: string }

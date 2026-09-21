@@ -101,6 +101,11 @@ export interface DatabaseChoice {
     /** `false` si el login no puede entrar: se muestra, pero no se puede seleccionar. */
     accessible: boolean;
     owner: string;
+    /**
+     * `true` si la base tiene la contención activada (M10). Es lo único que decide si se puede
+     * crear un usuario con contraseña propia, así que el panel solo ofrece esa acción aquí.
+     */
+    contained: boolean;
 }
 
 /** Tipo de un usuario de base de datos. */

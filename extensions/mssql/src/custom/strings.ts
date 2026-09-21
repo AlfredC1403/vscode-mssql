@@ -270,4 +270,23 @@ export const Strings = {
         settingEnabled: (label: string, key: string, scope: string) =>
             `SQLWorks: ${label} está activado en los ajustes de ${scope} (\`${key}\`). Esa función descarga y ejecuta un binario desde un feed externo, que no es lo que este fork hace por omisión. Ver FORK.md §26.8.`,
     },
+
+    containerWatch: {
+        /**
+         * Restos de un despliegue anterior: hay un archivo con una contraseña en disco **ahora**.
+         *
+         * Dice la ruta porque es lo único que hace falta para arreglarlo, y no dice «bórralo»: el
+         * fork no sabe si hay un despliegue en marcha usando ese directorio.
+         */
+        leftover: (directory: string) =>
+            `SQLWorks: han quedado restos de un despliegue de Data API Builder en \`${directory}\`. Ese directorio contiene la cadena de conexión, con la contraseña en claro, y debería haberse borrado al terminar. Ver FORK.md §28.`,
+        /**
+         * El camino de contenedor se está usando ahora mismo.
+         *
+         * No es un error y el texto no lo trata como tal: es una salida de red y una contraseña en
+         * disco, las dos cosas que este fork quiere que se vean.
+         */
+        live: (directory: string) =>
+            `SQLWorks: se está desplegando Data API Builder en un contenedor. Eso descarga la imagen desde mcr.microsoft.com y escribe la cadena de conexión, con la contraseña en claro, en \`${directory}\` mientras dure. Ver FORK.md §28.`,
+    },
 } as const;

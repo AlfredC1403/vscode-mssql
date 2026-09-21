@@ -1,0 +1,93 @@
+# Fork interno (SQLWorks). Archivo nuevo: no toca ningún workflow del upstream.
+#
+# Lo que valida es lo que M9 y §27 corrieron a mano cada vez: la auditoría de la deuda de merge, el
+# build, el lint, los dos typechecks y la suite de unitarios completa. La cifra de referencia está
+# en FORK.md §27.5, 5554 pasando.
+#
+# Los e2e **no** entran, y no es un olvido: necesitan una instancia de SQL Server sembrada (§13.1) y
+# una instalación desde el marketplace que en un runner falla de forma intermitente (§27.5). Se
+# siguen corriendo a mano, contra un servidor de verdad, que es donde miden algo.
+name: Fork - auditoría, build y unitarios
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# Un empujón nuevo sobre la misma rama cancela el anterior: la suite tarda, y el resultado de un
+# commit ya superado no lo mira nadie.
+concurrency:
+  group: fork-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  fork:
+    name: Auditoría, build y unitarios
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # La auditoría mide contra el commit del upstream que declara FORK.md, así que
+          # necesita la historia entera. Con el clon en superficie de por omisión, ese
+          # commit no está y la auditoría no puede ni empezar.
+          fetch-depth: 0
+
+      - name: Node.js
+        uses: ./.github/actions/setup-node
+
+      - name: Dependencias del sistema para el host de VS Code
+        # Los unitarios del upstream arrancan un VS Code de verdad (`@vscode/test-electron`),
+        # y sin pantalla ni estas bibliotecas no llega a abrir.
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libxkbfile-dev pkg-config libsecret-1-dev libkrb5-dev libxss1 dbus xvfb libgtk-3-0 libgbm1
+          sudo cp extensions/mssql/build/xvfb.init /etc/init.d/xvfb
+          sudo chmod +x /etc/init.d/xvfb
+          sudo update-rc.d xvfb defaults
+          sudo service xvfb start
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Va antes del build a propósito: es la comprobación más barata del workflow y la que
+      # falla por un motivo que no se arregla mirando un log de compilación.
+      - name: Auditoría de la deuda de merge (FORK.md §0)
+        run: node scripts/fork/audit-merge-debt.mjs
+
+      - name: Construir la extensión
+        # El build hace los dos typechecks con tsgo, el de la extensión y el de los webviews,
+        # antes de emitir. Ver FORK.md §2.1.
+        run: npm run build -- --target mssql
+
+      - name: Lint
+        run: npm run lint -- --target mssql
+
+      - name: Formato
+        run: npm run format:check
+
+      - name: Suite de unitarios
+        run: xvfb-run -a npm test -- --target mssql
+
+      - name: Empaquetar el .vsix de Windows
+        # El artefacto que se distribuye. Se genera en cada push a `main` para que exista sin
+        # que nadie tenga que acordarse de empaquetarlo. Ver FORK.md §29.
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        working-directory: extensions/mssql
+        run: node scripts/package-fork.js --platform win-x64
+
+      - name: Publicar el .vsix como artefacto
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sqlworks-win-x64
+          path: extensions/mssql/*.vsix
+          if-no-files-found: error
+          retention-days: 30

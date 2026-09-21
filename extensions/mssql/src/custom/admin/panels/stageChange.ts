@@ -17,6 +17,7 @@ import {
     buildCreateDatabaseRoleStatement,
     buildCreateLoginStatement,
     buildCreateServerRoleStatement,
+    buildCreateContainedUserStatement,
     buildCreateUserStatement,
     buildDropLoginStatement,
     buildDropRoleStatement,
@@ -24,6 +25,7 @@ import {
 } from "../sql/ddl/createPrincipals";
 import { toPermissionScope } from "../sql/ddl/permissionNames";
 import {
+    databaseIsContained,
     loginUnchanged,
     membershipState,
     serverPermissionState,
@@ -317,6 +319,28 @@ export function stageRequestToStatement(
                         kind: "createUser",
                         subject: request.user,
                         transition: request.login ? `→ Para ${request.login}` : "→ Sin login",
+                        scope: database,
+                        sql: statement.sql,
+                        destructive: false,
+                    },
+                };
+            }
+
+            case "createContainedUser": {
+                const statement = buildCreateContainedUserStatement({
+                    name: request.user,
+                    database,
+                    defaultSchema: request.defaultSchema,
+                });
+                // La contención se comprueba **dentro de la transacción**: el panel pinta la lista
+                // de bases una vez, y entre eso y ejecutar alguien puede haberla quitado.
+                statement.precondition = databaseIsContained(database);
+                return {
+                    statement,
+                    change: {
+                        kind: "createContainedUser",
+                        subject: request.user,
+                        transition: "→ Con contraseña propia",
                         scope: database,
                         sql: statement.sql,
                         destructive: false,

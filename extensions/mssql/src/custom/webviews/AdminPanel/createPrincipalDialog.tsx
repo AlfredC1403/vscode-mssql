@@ -63,7 +63,7 @@ export interface CreatePrincipalResult {
 export interface CreatePrincipalDialogProps {
     open: boolean;
     /** Qué se crea. Decide qué campos se piden. */
-    kind: "login" | "user" | "serverRole" | "databaseRole";
+    kind: "login" | "user" | "containedUser" | "serverRole" | "databaseRole";
     /** Opciones para el desplegable del campo relacionado (logins, o propietarios posibles). */
     relatedOptions: string[];
     /** Opciones para el campo secundario (esquemas, o bases de datos). */
@@ -180,6 +180,44 @@ export const CreatePrincipalDialog = ({
                                         ))}
                                     </Dropdown>
                                 </Field>
+                            )}
+
+                            {kind === "containedUser" && (
+                                <Field label={Loc.create.containedUser.schemaLabel}>
+                                    <Dropdown
+                                        value={secondary}
+                                        selectedOptions={secondary ? [secondary] : []}
+                                        placeholder={Loc.create.containedUser.schemaDefault}
+                                        onOptionSelect={(_, data) =>
+                                            setSecondary(data.optionValue ?? "")
+                                        }>
+                                        <Option value="">
+                                            {Loc.create.containedUser.schemaDefault}
+                                        </Option>
+                                        {secondaryOptions.map((option) => (
+                                            <Option key={option} value={option}>
+                                                {option}
+                                            </Option>
+                                        ))}
+                                    </Dropdown>
+                                </Field>
+                            )}
+
+                            {kind === "containedUser" && (
+                                <>
+                                    <MessageBar intent="info">
+                                        <MessageBarBody>
+                                            {Loc.create.containedUser.explanation}
+                                        </MessageBarBody>
+                                    </MessageBar>
+                                    {/* Misma regla 11.3 que en el login: este diálogo tampoco
+                                        tiene campo de contraseña, y se dice dónde se pedirá. */}
+                                    <MessageBar intent="info">
+                                        <MessageBarBody>
+                                            {Loc.create.containedUser.passwordLater}
+                                        </MessageBarBody>
+                                    </MessageBar>
+                                </>
                             )}
 
                             {kind === "user" && (

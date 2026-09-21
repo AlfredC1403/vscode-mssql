@@ -1,0 +1,85 @@
+# Fork interno (SQLWorks). Archivo nuevo: no toca ningún workflow del upstream.
+#
+# Construye, empaqueta y publica el .vsix de una versión. El proceso completo, con la convención de
+# versiones y cómo se instala en la máquina de destino, está en docs/fork/DISTRIBUCION.md.
+name: Fork - publicar el .vsix
+
+on:
+  push:
+    tags:
+      - "sqlworks-v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Etiqueta a publicar (sqlworks-vX.Y.Z)"
+        required: true
+
+jobs:
+  release:
+    name: Empaquetar y publicar
+    runs-on: ubuntu-latest
+    permissions:
+      # Crear la publicación y adjuntarle el .vsix.
+      contents: write
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Node.js
+        uses: ./.github/actions/setup-node
+
+      # Una publicación `v0.2.0` que contenga un .vsix `0.1.0` es peor que no publicar: el
+      # número de la etiqueta es lo que la gente cita, y el del manifiesto es el que VS Code
+      # usa para decidir si instala. Si no coinciden, aquí se para.
+      - name: Comprobar que la etiqueta y el manifiesto dicen lo mismo
+        run: |
+          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG_VERSION="${TAG#sqlworks-v}"
+          MANIFEST_VERSION="$(node -p "require('./extensions/mssql/package.json').version")"
+          echo "etiqueta: $TAG_VERSION / manifiesto: $MANIFEST_VERSION"
+          if [ "$TAG_VERSION" != "$MANIFEST_VERSION" ]; then
+            echo "::error::La etiqueta dice $TAG_VERSION y extensions/mssql/package.json dice $MANIFEST_VERSION."
+            exit 1
+          fi
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Auditoría de la deuda de merge (FORK.md §0)
+        run: node scripts/fork/audit-merge-debt.mjs
+
+      - name: Construir la extensión
+        run: npm run build -- --target mssql
+
+      - name: Empaquetar el .vsix de Windows
+        working-directory: extensions/mssql
+        run: node scripts/package-fork.js --platform win-x64
+
+      # Las notas van en un archivo aparte porque son varias líneas con formato, y así el
+      # paso que publica se lee de un vistazo.
+      - name: Escribir las notas de la publicación
+        run: |
+          cat > /tmp/notas.md <<'NOTAS'
+          `.vsix` para **win-x64**, con el SQL Tools Service dentro: no descarga nada al
+          arrancar y no necesita el runtime de .NET en la máquina de destino.
+
+          Cómo se instala y cómo se actualiza: `docs/fork/DISTRIBUCION.md`.
+
+          El commit del upstream que lleva esta versión está en la fila «Último merge con el
+          upstream» de `FORK.md`.
+          NOTAS
+
+      - name: Publicar
+        # `gh` viene en el runner, así que no hace falta una acción de terceros para adjuntar
+        # un archivo a una publicación. Una dependencia menos que fijar y revisar.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          gh release create "$TAG" extensions/mssql/*.vsix \
+            --title "SQLWorks ${TAG#sqlworks-v}" \
+            --notes-file /tmp/notas.md

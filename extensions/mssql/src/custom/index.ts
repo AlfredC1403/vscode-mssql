@@ -12,6 +12,7 @@ import { SnippetsViewController } from "./snippets/snippetsViewController";
 import { FormatProfilesController } from "./format/formatProfilesController";
 import { pickAndApplyProfile } from "./format/applyProfileCommand";
 import { watchNetworkSettings } from "./overrides/networkWatch";
+import { watchContainerSpills } from "./overrides/containerWatch";
 
 /**
  * Identificadores de los comandos que aporta el fork.
@@ -127,6 +128,13 @@ export function registerCustom(
     // No apaga nada: avisa si alguien ha encendido las claves de Data API Builder que descargan y
     // ejecutan un binario de un feed externo. Ver `overrides/networkWatch.ts` y FORK.md §26.8.
     keep(watchNetworkSettings());
+
+    // --- M10: el camino de contenedor de Data API Builder ---
+    //
+    // El de M9 vigila las claves de la **CLI**. Éste vigila el otro, que no cuelga de ninguna clave
+    // y escribe la cadena de conexión con contraseña en un temporal. Ver `overrides/containerWatch.ts`
+    // y FORK.md §28.
+    keep(watchContainerSpills());
 }
 
 /** Lo que registró la última llamada a `registerCustom`. */

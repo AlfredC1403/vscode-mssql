@@ -33,21 +33,23 @@ del bloque. Para auditarlas:
 git grep -n "\[FORK\]"
 ```
 
-| Archivo                                                         | Qué se cambió                                                                                                                                                                                                                                          | Por qué                                                                                                                                                        | Hito |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---- |
-| `extensions/mssql/package.json`                                 | Bloque de identidad (`name`, `displayName`, `version`, `description`, `publisher`, `icon`, `repository`, `bugs`, `homepage`, `galleryBanner`, `keywords`); título del contenedor de vistas; `extensionPack` sin `ms-dotnettools.vscode-dotnet-runtime` | Renombrado del §7 del brief. El runtime de .NET sobra porque el STS va autocontenido                                                                           | M1   |
-| `extensions/mssql/src/extension.ts`                             | **2 líneas**: el `import` de `disableTelemetry` y su llamada en lugar de `initializeTelemetryReporter(...)`                                                                                                                                            | Quitar el envío de telemetría. La lógica vive en `src/custom/overrides/telemetry.ts`                                                                           | M1   |
-| `extensions/mssql/README.md`                                    | Reescrito                                                                                                                                                                                                                                              | Se distribuye dentro del `.vsix` bajo nuestro nombre, y el del upstream es material de marca de Microsoft                                                      | M1   |
-| `extensions/mssql/images/extensionIcon.png`                     | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                   | El logotipo de Microsoft no se redistribuye. Lo importa `src/webviews/pages/Changelog/changelogPage.tsx:40`, así que conservar la ruta evita tocar ese webview | M1   |
-| `extensions/mssql/images/mssql-chat-avatar.jpg`                 | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                   | Ídem. Manteniendo la ruta no hay que tocar `extension.ts:155`                                                                                                  | M1   |
-| `extensions/mssql/images/yt-thumbnail.png`                      | **Eliminado**                                                                                                                                                                                                                                          | Recurso de marketing de Microsoft. Nada lo referenciaba en local: el README apuntaba a `raw.githubusercontent.com`                                             | M1   |
-| `extensions/mssql/images/mssql-demo.gif`                        | **Eliminado**                                                                                                                                                                                                                                          | Ídem, sin ninguna referencia                                                                                                                                   | M1   |
-| `extensions/mssql/src/constants/constants.ts`                   | **1 línea**: `extensionId` pasa a `alfredc1403.sqlworks`                                                                                                                                                                                               | La extensión se autolocaliza con `vscode.extensions.getExtension(extensionId)` en 6 sitios. Ver §15.6                                                          | M1   |
-| `extensions/mssql/src/databaseProjects/common/extensionIds.ts`  | **1 línea**: `mssqlExtensionId`                                                                                                                                                                                                                        | Ídem, segunda copia del mismo identificador                                                                                                                    | M1   |
-| `extensions/mssql/src/databaseProjects/tools/buildHelper.ts`    | **1 línea**: identificador en línea                                                                                                                                                                                                                    | Ídem, tercera copia                                                                                                                                            | M1   |
-| `extensions/mssql/src/integration/azureResourcesIntegration.ts` | **1 línea**: autoridad del URI `vscode://…/connect`                                                                                                                                                                                                    | VS Code enruta `vscode://<publisher>.<name>/…` al gestor de URI de la extensión                                                                                | M1   |
-| `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo, **más su marcador `// [FORK]` (añadido en M9)**                                                                                                                                               | Quedaban desactualizadas tras el cambio anterior. Era el único archivo de esta tabla sin marcador, así que `git grep "\[FORK\]"` no lo veía (§26.5)            | M1   |
-| `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                       | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                | M1   |
+| Archivo                                                         | Qué se cambió                                                                                                                                                                                                                                                                                                                                     | Por qué                                                                                                                                                                                                                              | Hito |
+| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---- |
+| `extensions/mssql/package.json`                                 | Bloque de identidad (`name`, `displayName`, `version`, `description`, `publisher`, `icon`, `repository`, `bugs`, `homepage`, `galleryBanner`, `keywords`); título del contenedor de vistas; `extensionPack` sin `ms-dotnettools.vscode-dotnet-runtime`                                                                                            | Renombrado del §7 del brief. El runtime de .NET sobra porque el STS va autocontenido                                                                                                                                                 | M1   |
+| `extensions/mssql/src/extension.ts`                             | **2 líneas**: el `import` de `disableTelemetry` y su llamada en lugar de `initializeTelemetryReporter(...)`                                                                                                                                                                                                                                       | Quitar el envío de telemetría. La lógica vive en `src/custom/overrides/telemetry.ts`                                                                                                                                                 | M1   |
+| `extensions/mssql/README.md`                                    | Reescrito                                                                                                                                                                                                                                                                                                                                         | Se distribuye dentro del `.vsix` bajo nuestro nombre, y el del upstream es material de marca de Microsoft                                                                                                                            | M1   |
+| `extensions/mssql/images/extensionIcon.png`                     | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                                                                                                              | El logotipo de Microsoft no se redistribuye. Lo importa `src/webviews/pages/Changelog/changelogPage.tsx:40`, así que conservar la ruta evita tocar ese webview                                                                       | M1   |
+| `extensions/mssql/images/mssql-chat-avatar.jpg`                 | Contenido sustituido, **misma ruta**                                                                                                                                                                                                                                                                                                              | Ídem. Manteniendo la ruta no hay que tocar `extension.ts:155`                                                                                                                                                                        | M1   |
+| `extensions/mssql/images/yt-thumbnail.png`                      | **Eliminado**                                                                                                                                                                                                                                                                                                                                     | Recurso de marketing de Microsoft. Nada lo referenciaba en local: el README apuntaba a `raw.githubusercontent.com`                                                                                                                   | M1   |
+| `extensions/mssql/images/mssql-demo.gif`                        | **Eliminado**                                                                                                                                                                                                                                                                                                                                     | Ídem, sin ninguna referencia                                                                                                                                                                                                         | M1   |
+| `extensions/mssql/src/constants/constants.ts`                   | **1 línea**: `extensionId` pasa a `alfredc1403.sqlworks`                                                                                                                                                                                                                                                                                          | La extensión se autolocaliza con `vscode.extensions.getExtension(extensionId)` en 6 sitios. Ver §15.6                                                                                                                                | M1   |
+| `extensions/mssql/src/databaseProjects/common/extensionIds.ts`  | **1 línea**: `mssqlExtensionId`                                                                                                                                                                                                                                                                                                                   | Ídem, segunda copia del mismo identificador                                                                                                                                                                                          | M1   |
+| `extensions/mssql/src/databaseProjects/tools/buildHelper.ts`    | **1 línea**: identificador en línea                                                                                                                                                                                                                                                                                                               | Ídem, tercera copia                                                                                                                                                                                                                  | M1   |
+| `extensions/mssql/src/integration/azureResourcesIntegration.ts` | **1 línea**: autoridad del URI `vscode://…/connect`                                                                                                                                                                                                                                                                                               | VS Code enruta `vscode://<publisher>.<name>/…` al gestor de URI de la extensión                                                                                                                                                      | M1   |
+| `extensions/mssql/src/mssqlProtocolHandler.ts`                  | 2 líneas de comentario con el esquema de URI de ejemplo, **más su marcador `// [FORK]` (añadido en M9)**                                                                                                                                                                                                                                          | Quedaban desactualizadas tras el cambio anterior. Era el único archivo de esta tabla sin marcador, así que `git grep "\[FORK\]"` no lo veía (§26.5)                                                                                  | M1   |
+| `extensions/mssql/package-lock.json`                            | **M10, 4 líneas**: `name` y `version` pasan a `sqlworks` y `0.1.0`, en la cabecera y en el paquete raíz                                                                                                                                                                                                                                           | Lo reescribe `npm ci` solo, porque el manifiesto se renombró en M1 y el candado se quedó diciendo `mssql` `1.46.0`. Sin commit, cada instalación deja el árbol sucio. Es un archivo generado: un conflicto se resuelve regenerándolo | M10  |
+| `README.md`                                                     | **M10**: reescrito entero. Es el README del monorepo, no el que va dentro del `.vsix`; el del upstream describe la extensión publicada por Microsoft y aquí manda a `FORK.md`, `DEVELOPMENT.md` y `docs/fork/`. Es la única deuda de merge que M10 añade, y §15.5 ya la daba por «sin riesgo»: un conflicto se resuelve quedándose con el nuestro | Que el repositorio se explique a sí mismo. Lo pidió el usuario al mandar hacer los pendientes                                                                                                                                        | M10  |
+| `eslint.config.mjs`                                             | Plantilla `forkNotice` y un bloque final que la aplica a `src/custom/**` y `test/unit/custom/**`                                                                                                                                                                                                                                                  | La regla `notice/notice` exige la cabecera de copyright de Microsoft en todo archivo. Nuestro código no es suyo                                                                                                                      | M1   |
 
 | `extensions/mssql/package.json` | **M2**: comando `sqlworks.openAdminPanel` y su entrada en `view/item/context` | Anclaje nº1 del brief: así el panel se lanza desde el árbol sin tocar el explorador de objetos | M2 |
 | `extensions/mssql/src/extension.ts` | **M2, 2 líneas más**: el `import` de `registerCustom` y su llamada | Anclaje nº2 del brief: registro único de todo lo que añade el fork | M2 |
@@ -118,14 +120,24 @@ el upstream pone sus funciones puras compartidas.
 
 ### Archivos nuevos, que no generan conflicto
 
-| Archivo                                                       | Para qué                                                                                                                                                                                                                                                     |
-| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `extensions/mssql/src/custom/overrides/telemetry.ts`          | El corte de telemetría, documentado                                                                                                                                                                                                                          |
-| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts` | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
-| `extensions/mssql/images/sqlworksIcon.png`                    | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
-| `extensions/mssql/scripts/package-fork.js`                    | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
-| `NOTICE.md`                                                   | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
-| `FORK.md`                                                     | Este archivo                                                                                                                                                                                                                                                 |
+| Archivo                                                              | Para qué                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `extensions/mssql/src/custom/overrides/telemetry.ts`                 | El corte de telemetría, documentado                                                                                                                                                                                                                          |
+| `extensions/mssql/test/unit/custom/telemetryOverride.test.ts`        | Fija el corte para que un merge no lo revierta en silencio                                                                                                                                                                                                   |
+| `extensions/mssql/images/sqlworksIcon.png`                           | El icono al que apunta de verdad `package.json`. La copia idéntica en `images/extensionIcon.png` existe solo para no tocar `changelogPage.tsx:40`, que la importa por esa ruta (NOTICE.md). **Son dos copias: al cambiar el logotipo hay que tocar las dos** |
+| `extensions/mssql/scripts/package-fork.js`                           | Empaquetado de una sola plataforma (ver §2.1)                                                                                                                                                                                                                |
+| `NOTICE.md`                                                          | Aviso de copyright propio, junto al de Microsoft                                                                                                                                                                                                             |
+| `FORK.md`                                                            | Este archivo                                                                                                                                                                                                                                                 |
+| `extensions/mssql/src/custom/overrides/containerWatch.ts`            | **M10**: el aviso del camino de contenedor de Data API Builder (§28)                                                                                                                                                                                         |
+| `extensions/mssql/src/custom/sharedInterfaces/securableHierarchy.ts` | **M10**: la jerarquía de objetos protegibles, que cierra el límite que la matriz anunciaba (§30.2)                                                                                                                                                           |
+| `scripts/fork/forkMd.mjs`                                            | **M10**: lo que las dos herramientas leen de `FORK.md` y de git                                                                                                                                                                                              |
+| `scripts/fork/audit-merge-debt.mjs`                                  | **M10**: la auditoría que compara la tabla del §0, los marcadores y el manifiesto (§29.2)                                                                                                                                                                    |
+| `scripts/fork/upstream-distance.mjs`                                 | **M10**: mide cuánto se ha movido el upstream y cuántos commits tocan archivos nuestros (§29.3)                                                                                                                                                              |
+| `.github/workflows/fork-ci.yml`                                      | **M10**: auditoría, build, lint, formato, typechecks y unitarios en cada empujón (§29.1)                                                                                                                                                                     |
+| `.github/workflows/fork-release.yml`                                 | **M10**: empaqueta y publica el `.vsix` al etiquetar (§29.4)                                                                                                                                                                                                 |
+| `.github/workflows/fork-upstream-distance.yml`                       | **M10**: la medición semanal de la distancia con el upstream (§29.3)                                                                                                                                                                                         |
+| `docs/fork/DISTRIBUCION.md`                                          | **M10**: versión, empaquetado, publicación, instalación y actualización (§29.4)                                                                                                                                                                              |
+| `docs/fork/PARIDAD-1B-KERBEROS.md`                                   | **M10**: qué probar para cerrar la última fila de la lista de paridad (§29.5)                                                                                                                                                                                |
 
 ---
 
@@ -1790,6 +1802,10 @@ la que se puede leer.
 objetos. Un `DENY` sobre una columna sale como fila aparte del `GRANT` sobre el esquema, en lugar de
 fundirse en una sola fila «denegado». Es lo que muestran los catálogos, y esconderlo sería peor.
 
+> **Cerrado en M10** (§30.2). Las filas siguen siendo las del catálogo —no se funden ni se inventan
+> otras—, pero ahora cada una dice **qué efecto tiene de verdad** y **quién la anula**. La leyenda
+> cambió en consecuencia, y el límite que anuncia ahora es otro: los permisos que cubren a otros.
+
 ### 21.4. Lo que cambió al correr las consultas contra un servidor real
 
 **`public` tiene cientos de `GRANT SELECT` sobre vistas del sistema.** La primera versión de la
@@ -1852,7 +1868,7 @@ Lo que el e2e fija con datos reales, sobre la cadena sembrada
   script, confirmación y transacción explícita.
 - **No muestra permisos de objeto uno por uno.** La matriz parte de los permisos **explícitos** del
   catálogo; los objetos sin permiso explícito no aparecen, porque no hay nada que contar de ellos.
-- **No resuelve la jerarquía de objetos** (§21.3), y lo dice en pantalla.
+- **No resuelve la jerarquía de objetos** (§21.3), y lo dice en pantalla. _(Hecho en M10. Ver §30.2.)_
 
 ---
 
@@ -2230,6 +2246,12 @@ Un usuario **contenido** (con su propia contraseña, en una base con `CONTAINMEN
 crea: es otro tipo de objeto y este panel no gestiona bases contenidas. Si se añade, será una función
 aparte con su propia ranura, no un parámetro opcional en `buildCreateUserStatement`.
 
+> **Hecho en M10** (§30.1), y el diseño previsto era el correcto: es una función aparte,
+> `buildCreateContainedUserStatement`, con su propia ranura. Lo que esta sección no anticipó es que
+> hiciera falta **una precondición**: la contención de la base se comprueba dentro de la transacción,
+> porque entre que el panel pinta la lista y alguien aplica los cambios la base puede haber dejado de
+> estar contenida.
+
 ### 23.4. Bases de datos: no se reimplementan, y la transacción no aportaría nada
 
 El brief pone crear, borrar y renombrar bases de datos en M6. **No se hace**, por dos razones que
@@ -2294,7 +2316,7 @@ aplicar es de tipo `password` de verdad.
 ### 23.7. Lo que M6 deliberadamente no hace
 
 - **No crea ni borra bases de datos** (§23.4).
-- **No gestiona usuarios contenidos** (§23.3).
+- **No gestiona usuarios contenidos** (§23.3). _(Hecho en M10. Ver §30.1.)_
 - **No guarda contraseñas en ningún sitio**, ni siquiera en el almacén de credenciales de VS Code:
   el panel administra logins ajenos, no perfiles de conexión propios, así que no hay nada que
   recordar.
@@ -3073,4 +3095,285 @@ su `--folder-uri` y el `import` de `pathToFileURL`—, en un archivo de arnés q
   `default: ""` no serviría de nada porque el upstream la lee con `?.trim() || undefined`.
 - **No toca el camino del contenedor**, que sigue abierto y sigue escribiendo la cadena de conexión
   —con contraseña— en un temporal con permisos `0600` que borra después. Está en §26.8 como lo que
-  es: un hecho conocido y aceptado, no un descuido.
+  es: un hecho conocido y aceptado, no un descuido. _(M10 tampoco lo toca, pero ya no es invisible:
+  §28 avisa cuando se usa y cuando deja restos.)_
+
+---
+
+## 28. El camino de contenedor de Data API Builder (M10)
+
+El §27 cerró la mitad de §26.8: hay un control detectivo para las dos claves de la **CLI**, y se
+midió que `scope: "application"` protege de verdad. Lo que quedó escrito y abierto, en §27.6, es que
+**el camino que de verdad está abierto es el otro**. Esta sección lo hace visible.
+
+### 28.1. Lo que hace ese camino, leído en el upstream
+
+No es una sospecha; está en `src/services/dabService.ts` y se puede ir a mirar:
+
+| Qué                                       | Dónde                         | Detalle                                                             |
+| ----------------------------------------- | ----------------------------- | ------------------------------------------------------------------- |
+| El directorio temporal                    | `dabService.ts:649`           | `os.tmpdir()/dab-<uuid>`                                            |
+| La cadena de conexión, **con contraseña** | `dabService.ts:449`           | `Dab.buildDabCliConnectionString(connectionInfo.connectionString…)` |
+| El archivo                                | `dabService.ts:658`           | `dab-config.json`, con `mode: 0o600`                                |
+| El borrado                                | `dabService.ts:676-680`       | `unlink(...).catch(() => {})`, y luego el directorio                |
+| La imagen                                 | `sharedInterfaces/dab.ts:794` | `mcr.microsoft.com/azure-databases/data-api-builder`                |
+
+Dos cosas importan de esa tabla, y son las que dan forma al control:
+
+1. **La contraseña va en claro dentro del archivo.** El camino de la CLI no la escribe: usa
+   `@env('DAB_CONNECTION_STRING')` (`dabService.ts:284`). El de contenedor sí. Es la corrección 2 de
+   §26.8, ahora con la línea al lado.
+2. **El borrado se traga sus errores.** Si VS Code muere antes, o el borrado falla, el archivo se
+   queda. Y a diferencia del camino de la CLI, éste **no cuelga de ningún ajuste**: no hay clave que
+   vigilar como en §27.3.
+
+### 28.2. Por eso son dos avisos, y no uno
+
+`src/custom/overrides/containerWatch.ts`, arrancado por `registerCustom`, que ya es el anclaje nº 2.
+**Cero anclajes nuevos, cero archivos del upstream tocados**, igual que (d).
+
+| Cuándo                             | Qué se ha visto               | Qué significa para quien lo lee        |
+| ---------------------------------- | ----------------------------- | -------------------------------------- |
+| Al activar: un barrido de `tmpdir` | Un `dab-<uuid>` que ya estaba | **Hay una contraseña en disco ahora**  |
+| Con el fork activo: `fs.watch`     | Un `dab-<uuid>` que aparece   | El camino de contenedor se está usando |
+
+El primero es el hallazgo de verdad: no avisa de lo que va a pasar, avisa de lo que **ya pasó y
+quedó a medias**. El segundo es la visibilidad, que es lo que el usuario eligió en §27.
+
+Tres decisiones, con su motivo:
+
+1. **El nombre se exige entero**: `dab-` más un UUID con su forma completa. `os.tmpdir()` lo comparte
+   toda la máquina, y un aviso que salta con el `dab-cache` de otro programa deja de leerse. Hay
+   cinco tests que fijan justo eso, y son negativos.
+2. **`fs.watch` no recursivo.** Lo que se vigila es que aparezca el directorio, no lo que se escriba
+   dentro. Un vigilante recursivo sobre el temporal de toda la máquina sería caro y ruidoso.
+3. **Si `fs.watch` falla, no pasa nada.** En Linux puede fallar por el límite de `inotify`. Queda el
+   barrido, que es la parte que encuentra lo que importa. Un test comprueba que un `tmpdir` que no
+   existe no impide arrancar: si eso subiera, `registerCustom` se quedaría a medias y el panel no se
+   registraría.
+
+### 28.3. Lo que deliberadamente no hace
+
+- **No abre ninguno de esos archivos.** Mira el nombre del directorio y nada más. Un control que
+  leyera el archivo para «confirmar» que hay una contraseña sería el mismo problema que denuncia.
+- **No borra nada.** Borrar el directorio de un despliegue en marcha lo rompería, y el fork no sabe
+  si hay uno en marcha. El aviso dice la ruta; borrarlo es decisión de la persona.
+- **No apaga la función ni toca `src/dab/`**, por lo mismo que §26.8: sería un quinto anclaje.
+
+---
+
+## 29. Sostener el fork: auditoría, integración continua y distribución (M10)
+
+M0–M9 construyeron el fork. Esta sección es lo que hace que siga siendo verdad sin que nadie tenga
+que acordarse.
+
+### 29.1. Integración continua propia
+
+`.github/workflows/fork-ci.yml`, archivo nuevo: no toca ninguno de los cinco workflows del upstream.
+En cada empujón a `main` y en cada PR corre lo que M9 y §27 corrieron a mano: **auditoría, build,
+lint, formato, los dos typechecks y la suite de unitarios**, y deja el `.vsix` de `win-x64` como
+artefacto.
+
+Los e2e **no** entran, y no es un olvido: necesitan una instancia sembrada (§13.1) y una instalación
+desde el marketplace que en un runner falla de forma intermitente (§27.5, `ECONNRESET`). Se siguen
+corriendo a mano, contra un servidor de verdad, que es donde miden algo.
+
+La auditoría va **antes** del build a propósito: es el paso más barato y el que falla por un motivo
+que no se arregla mirando un log de compilación.
+
+### 29.2. La auditoría de la deuda de merge
+
+`node scripts/fork/audit-merge-debt.mjs`. Compara las fuentes que tienen que decir lo mismo:
+
+| #   | Qué comprueba                                                          | El defecto que evita               |
+| --- | ---------------------------------------------------------------------- | ---------------------------------- |
+| 1   | Todo archivo del upstream modificado o borrado está en la tabla del §0 | Una tabla incompleta               |
+| 2   | Todo archivo del upstream modificado lleva su marcador `// [FORK]`     | **El defecto del §26.5**           |
+| 3   | Nada de la tabla del §0 se ha quedado obsoleto                         | Una tabla que sobrevalora el coste |
+| 4   | Todo lo que el fork añade al manifiesto lleva el prefijo `sqlworks.`   | §26.8, corrección 3                |
+| 5   | Nadie se busca a sí mismo por `ms-mssql.mssql`                         | **El fallo del §15.6**             |
+
+Dos cosas que la hacen útil y no decorativa:
+
+- **El punto de comparación sale de `FORK.md`**, de la fila «Último merge con el upstream». Si
+  alguien integra el upstream y no actualiza esa fila, la auditoría se rompe, que es exactamente la
+  disciplina que pide el punto 5 del §12. No hace falta red ni el remoto `upstream`.
+- **Está comprobada al revés.** Quitar el marcador de `mssqlProtocolHandler.ts` —el archivo concreto
+  del §26.5— la pone en rojo con ese archivo por nombre; devolverlo la pone en verde. Lo mismo con
+  una referencia a `ms-mssql.mssql` inyectada a mano. Una auditoría que nunca se ha visto fallar no
+  es una auditoría.
+
+La lista de excepciones al marcador es corta y cerrada, con el motivo escrito en cada una:
+`package.json` (JSON no admite comentarios, y por eso existe la comprobación 4), `package-lock.json` (JSON, y además generado por npm), el `README.md` de la extensión (reescrito entero) y dos imágenes.
+
+**Mide `HEAD`, no el árbol de trabajo.** Es lo correcto para la integración continua, que corre sobre
+lo empujado; en local hay que tener el cambio en un commit para que lo vea.
+
+### 29.3. La distancia con el upstream
+
+`node scripts/fork/upstream-distance.mjs --fetch`, y una vez por semana en
+`.github/workflows/fork-upstream-distance.yml`. **No integra nada**: informa.
+
+El punto 3 del §12 fija un merge cada tres meses y el aviso de debajo reconoce que puede ser
+demasiado. Lo que decide de verdad no es el calendario: es **cuántos de los commits nuevos tocan los
+archivos de la tabla del §0**, porque son los únicos que pueden dar conflicto. Eso es lo que imprime,
+con los archivos y los commits por nombre.
+
+Medido el 2026-09-21, contra `upstream/main`:
+
+| Qué                                              | Valor                                                    |
+| ------------------------------------------------ | -------------------------------------------------------- |
+| Commits nuevos desde `f9e632ea`                  | **4**                                                    |
+| De ésos, tocan archivos nuestros                 | **1** (`db533b3`, sobre `extensions/mssql/package.json`) |
+| Versión de la extensión en la punta del upstream | `1.46.0`, sin cambio                                     |
+
+Sin la referencia del upstream en el clon, sale con 0 y lo dice: una máquina recién clonada no tiene
+ese remoto, y una rutina que da rojos que nadie puede arreglar deja de leerse.
+
+### 29.4. Distribución
+
+El proceso completo está en `docs/fork/DISTRIBUCION.md`. Lo que decide:
+
+- **La versión es propia**, y no la del upstream. Hoy es la `0.1.0` del manifiesto. Un número que se
+  mueve solo cuando publica Microsoft no informa de nada nuestro, y dos compilados del fork con el
+  mismo número no se pueden instalar uno encima del otro.
+- **Un `.vsix` instalado a mano no se actualiza solo.** VS Code solo busca actualizaciones de lo que
+  viene del marketplace. Es la contrapartida de distribuir internamente, y está dicha donde alguien
+  la va a leer antes de quedarse seis meses atrás.
+- **Etiquetar publica.** `fork-release.yml` construye, empaqueta y crea la publicación de GitHub con
+  el `.vsix` adjunto, y **se para si la etiqueta y la versión del manifiesto no coinciden**: una
+  publicación `v0.2.0` con un `.vsix` `0.1.0` es peor que no publicar. Los artefactos del workflow de
+  cada empujón caducan a los 30 días; una publicación no.
+
+### 29.5. La fila 1b, preparada para quien tenga un dominio
+
+`docs/fork/PARIDAD-1B-KERBEROS.md`. No la cierra —aquí no hay dominio—, pero deja hecho todo lo que
+se puede hacer sin uno:
+
+- **Acota el riesgo.** Revisados los sitios que se autolocalizan por el identificador de la
+  extensión: **ninguno está en el camino de conexión**. Son el changelog, el controlador de
+  proyectos, la encuesta y el ayudante de compilación. La autenticación integrada viaja como
+  parámetro hasta el SQL Tools Service.
+- **Nombra el candidato de verdad**, que es consecuencia de la decisión 11.4: el servicio va
+  **autocontenido**, y quien habla Kerberos con el servidor es ese servicio. En Windows eso va por
+  SSPI, del sistema operativo, así que el riesgo es bajo; en Linux y macOS dependería de las
+  bibliotecas de Kerberos del sistema, y ahí sería lo primero que probar.
+- **Dice cómo se mide, y no solo que funcione**: `auth_scheme` de `sys.dm_exec_connections` tiene que
+  decir `KERBEROS`. Si dice `NTLM`, la conexión funcionó y **la fila no se cierra**, porque falta el
+  SPN y se ha probado otra cosa.
+
+---
+
+## 30. Usuarios contenidos y jerarquía de permisos (M10)
+
+Los dos huecos funcionales que M6 y M4 dejaron escritos como decisiones.
+
+### 30.1. Usuarios contenidos
+
+§23.3 dijo cómo se haría si se hacía: «una función aparte con su propia ranura, no un parámetro
+opcional en `buildCreateUserStatement`». Es exactamente lo que es,
+`buildCreateContainedUserStatement`, y por dos motivos que no son de estilo:
+
+1. **Tiene ranura de contraseña** y el otro no, con todo lo que arrastra la regla 11.3.
+2. **La sintaxis no es la misma.** Aquí `DEFAULT_SCHEMA` va dentro de la misma lista `WITH` que
+   `PASSWORD`, separada por coma; en `CREATE USER ... FOR LOGIN` el `WITH DEFAULT_SCHEMA` es su
+   propia cláusula. Un parámetro opcional habría obligado a dos ramas dentro del mismo generador.
+
+**Lo que §23.3 no anticipó: hace falta una precondición.** Un usuario con contraseña propia solo
+existe en una base contenida, y entre que el panel pinta la lista de bases y alguien aplica los
+cambios, la contención se puede haber quitado. `databaseIsContained` comprueba
+`sys.databases.containment` **dentro de la transacción**, así que el lote se revierte entero con una
+frase en lugar de con un error del motor.
+
+En la interfaz, el botón está en la tabla de usuarios y **se apaga con su motivo** cuando la base no
+está contenida. Es comodidad, no la barrera: la barrera es la precondición.
+
+**La contención se lee con `DATABASEPROPERTYEX`, no con la columna.** `sys.databases.containment`
+existe desde SQL Server 2012, y la consulta que la necesitaba es la que llena el **selector de
+bases**: si fallara, el panel se quedaría sin ninguna base. `DATABASEPROPERTYEX` devuelve `NULL` para
+una propiedad que el motor no conoce en lugar de dar error, así que en un servidor antiguo la base
+sale como no contenida y la función simplemente no se ofrece. Es la degradación que se quiere:
+perder una función, no la lista.
+
+### 30.2. La jerarquía de objetos protegibles
+
+El límite que la matriz de M4 anunciaba en su leyenda (§21.3): un `GRANT SELECT` sobre el esquema
+`ventas` y un `DENY SELECT` sobre `ventas.Cliente` salían como dos filas sueltas, y era el lector
+quien tenía que deducir que sobre esa tabla no puede leer.
+
+`sharedInterfaces/securableHierarchy.ts` lo calcula, **sin inventarse filas**: cada fila que sale ya
+estaba, y lo que se añade es qué efecto tiene de verdad y quién la anula. Las reglas, sobre los
+cuatro niveles base → esquema → objeto → columna:
+
+1. Un `DENY` de un nivel superior anula un `GRANT` de uno inferior.
+2. Un `GRANT` de arriba **no** rescata un `DENY` más concreto.
+3. **Un `DENY` a nivel de objeto no anula un `GRANT` a nivel de columna.** Microsoft lo documenta en
+   `GRANT` de permisos de objeto y lo llama, con esas palabras, una inconsistencia conservada por
+   compatibilidad.
+
+De las dos herencias, primero se resuelve la de roles y sobre su resultado la de objetos. Al revés no
+valdría: un `DENY` heredado de un rol también anula.
+
+**El padre de un objeto no se deduce partiendo el nombre por el primer punto.** Un objeto puede
+llamarse `a.b`, y entonces el «esquema» deducido no existiría. Se comprueba contra la lista de
+esquemas de la base, y si el prefijo no es uno de ellos el objeto se queda **sin padre**. Preferimos
+no relacionar a relacionar mal: una fila sin anular es un dato incompleto, y una fila anulada por el
+objeto equivocado es un dato falso. Hay test.
+
+### 30.3. Lo que en este hito **no** está medido, y por qué
+
+**Este es el primer hito del fork sin un SQL Server delante.** El contenedor donde se hizo no tiene
+demonio de Docker, así que no hubo instancia contra la que medir, a diferencia de M0–M9.
+
+Importa decir exactamente qué cambia eso:
+
+| Afirmación                                                          | De dónde sale              |
+| ------------------------------------------------------------------- | -------------------------- |
+| Las reglas 1 y 2 de la jerarquía                                    | Documentación de Microsoft |
+| La regla 3, la excepción objeto → columna                           | Documentación de Microsoft |
+| `CREATE USER ... WITH PASSWORD` exige base contenida (error 33233)  | Documentación de Microsoft |
+| `DATABASEPROPERTYEX` devuelve `NULL` para una propiedad desconocida | Documentación de Microsoft |
+| Todo lo demás que este archivo afirma del motor                     | **Medido**, M0–M9          |
+
+Lo que sí está comprobado de lo nuevo: **el T-SQL que se genera**, carácter a carácter, con tests
+unitarios, y que pasa la validación del plan (`validateStatement`), que es la que sostiene la
+seguridad de la plantilla del ejecutor. Lo que falta es ver al motor aceptarlo.
+
+**Qué hay que medir el día que haya un servidor:**
+
+1. Que `CREATE USER [n] WITH PASSWORD = '…'` funciona en una base con `CONTAINMENT = PARTIAL` y que
+   es **transaccional**, como las demás sentencias del §23.
+2. Que en una base sin contención la precondición salta antes que el motor, y el lote se revierte.
+3. **La regla 3**, que es la rara: un `DENY SELECT` sobre la tabla y un `GRANT SELECT` sobre una
+   columna suya, y comprobar con `HAS_PERMS_BY_NAME` que la columna se puede leer.
+
+### 30.4. Verificación
+
+| Qué                                  | Estado                                                                                             |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Auditoría de la deuda de merge       | ✅ verde, y comprobada en rojo quitando un marcador a propósito                                    |
+| `npm run build -- --target mssql`    | ✅                                                                                                 |
+| Typecheck de extensión y de webviews | ✅ los dos, con `tsgo`                                                                             |
+| Lint y formato                       | ✅                                                                                                 |
+| Suite completa                       | ✅ **5387 + 205 pasan, 0 fallan**, 17 omitidos (los dos ejecutores de `--target mssql`)            |
+| Unitarios nuevos de M10              | ✅ 38: 12 de `containerWatch`, 17 de la jerarquía, 7 de usuarios contenidos y 2 del mapeo de bases |
+| e2e                                  | ⚠️ **no corridos**: este entorno no tiene instancia de SQL Server                                  |
+| Distancia con el upstream            | ✅ medida: 4 commits, 1 toca un archivo nuestro                                                    |
+
+### 30.5. Lo que M10 deliberadamente no hace
+
+- **No cierra la paridad 1b.** Sigue haciendo falta un dominio Kerberos. Lo que sí hace es dejar la
+  prueba preparada y acotado el riesgo (§29.5).
+- **No resuelve los permisos que cubren a otros.** `CONTROL` sobre una tabla implica `SELECT` sobre
+  ella, y la matriz no lo muestra así: dos permisos solo se comparan si se llaman igual. Resolverlo
+  exige el grafo de implicaciones del motor, que es otra lista cerrada que habría que medir.
+- **No enumera objetos sin permiso explícito.** Sigue en pie la decisión del §21.3: una rejilla de
+  permisos × objetos es ilegible con cientos de objetos, y un objeto sin permiso explícito no tiene
+  nada que contar.
+- **No añade `DROP DATABASE` ni la vía irreversible más allá de `KILL`.** Es destructivo, no admite
+  transacción, y el upstream ya trae crear, borrar y renombrar bases de datos con vista previa
+  (§23.4). Se recomendó no hacerlo y no se ha hecho.
+- **No integra el upstream.** Hay 4 commits nuevos y uno toca nuestro `package.json`; el merge es una
+  decisión con su propia lista de paridad detrás (§12), no algo que se cuele en un hito.
+- **No declara `mssql.schemaDesigner.enableDeploymentsView`** (opción (b) del §26.8), que el usuario
+  ya descartó en §27.

@@ -72,14 +72,15 @@ suite("Fork: consultas de base de datos sin USE", () => {
 });
 
 suite("Fork: mapeo de bases de datos", () => {
-    const COLUMNS = ["name", "database_id", "owner", "has_access"];
+    // `containment` la añadió M10, y la lee `DATABASEPROPERTYEX`: 0 es sin contención.
+    const COLUMNS = ["name", "database_id", "owner", "has_access", "containment"];
 
     test("distingue las del sistema y las inaccesibles", () => {
         const databases = mapDatabases(
             result(COLUMNS, [
-                ["ParityDb", "5", "sa", "1"],
-                ["master", "1", "sa", "1"],
-                ["Ajena", "7", "otro", "0"],
+                ["ParityDb", "5", "sa", "1", "0"],
+                ["master", "1", "sa", "1", "0"],
+                ["Ajena", "7", "otro", "0", "0"],
             ]),
         );
 
@@ -88,10 +89,33 @@ suite("Fork: mapeo de bases de datos", () => {
             system: false,
             accessible: true,
             owner: "sa",
+            contained: false,
         });
         expect(databases[1].system, "master es del sistema").to.equal(true);
         // Una base que existe y no se puede abrir sale en la lista, marcada.
         expect(databases[2].accessible).to.equal(false);
+    });
+
+    test("marca como contenida cualquier contención distinta de cero", () => {
+        // 1 es parcial, que es la que existe hoy; 2 sería completa. Las dos admiten usuarios con
+        // contraseña propia, así que la pregunta es «distinta de 0», no «igual a 1».
+        const databases = mapDatabases(
+            result(COLUMNS, [
+                ["Suelta", "5", "sa", "1", "0"],
+                ["Parcial", "6", "sa", "1", "1"],
+                ["Completa", "7", "sa", "1", "2"],
+            ]),
+        );
+
+        expect(databases.map((database) => database.contained)).to.deep.equal([false, true, true]);
+    });
+
+    test("un servidor que no conoce la propiedad deja la base como no contenida", () => {
+        // `DATABASEPROPERTYEX` devuelve NULL para una propiedad desconocida, y el `ISNULL` de la
+        // consulta lo convierte en 0. Lo que se pierde es la función, no la lista de bases.
+        const databases = mapDatabases(result(COLUMNS, [["Antigua", "5", "sa", "1", "0"]]));
+
+        expect(databases[0].contained).to.equal(false);
     });
 });
 

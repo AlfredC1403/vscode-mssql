@@ -23,6 +23,10 @@ import { SectionState } from "../../sharedInterfaces/adminPanel";
 import { DataTable } from "../common/dataTable";
 import { AdminPanelContext } from "./adminPanelStateProvider";
 import { useAdminPanelSelector } from "./adminPanelSelector";
+import {
+    ResolvedPermission,
+    resolveSecurableHierarchy,
+} from "../../sharedInterfaces/securableHierarchy";
 import { WebviewStrings as Loc } from "../strings";
 
 const useStyles = makeStyles({
@@ -111,6 +115,21 @@ function describeOrigin(permission: EffectivePermission): string {
     return Loc.permissionMatrix.inherited(permission.via.join(Loc.permissionMatrix.chainSeparator));
 }
 
+/**
+ * Quién anula este permiso, dicho como lo diría una persona: «el DENY sobre el esquema ventas».
+ *
+ * Nombra el objeto protegible y su nivel, porque las dos cosas hacen falta para ir a quitarlo: un
+ * `ventas` suelto no distingue el esquema de una tabla que se llame igual.
+ */
+function describeOverride(permission: ResolvedPermission): string {
+    const override = permission.overriddenBy;
+    if (!override) {
+        return "";
+    }
+    const level = Loc.permissionMatrix.levels[override.level];
+    return override.securable ? `${level} ${override.securable}` : level;
+}
+
 /** Matriz de permisos efectivos de un principal (§10 del brief), en solo lectura. */
 export const PermissionMatrixView = () => {
     const styles = useStyles();
@@ -118,6 +137,7 @@ export const PermissionMatrixView = () => {
     const section = useAdminPanelSelector((state) => state?.databasePermissions);
     const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
     const database = useAdminPanelSelector((state) => state?.selectedDatabase);
+    const schemas = useAdminPanelSelector((state) => state?.schemas?.data);
     const [principal, setPrincipal] = useState<string | undefined>(undefined);
 
     const data = section?.data;
@@ -134,16 +154,28 @@ export const PermissionMatrixView = () => {
         }
     }, [principal, principals, database]);
 
+    // Los esquemas de la base, para deducir el padre de un objeto sin partir nombres a ciegas: un
+    // objeto puede llamarse `a.b`, y entonces el prefijo no es un esquema. Ver `securableHierarchy`.
+    const knownSchemas = useMemo(
+        () => new Set((schemas ?? []).map((schema) => schema.name)),
+        [schemas],
+    );
+
     const permissions = useMemo(() => {
         if (!data || !principal) {
             return [];
         }
-        return computeEffectivePermissions(principal, data.permissions, data.memberships);
-    }, [data, principal]);
+        // Dos herencias, en este orden: primero la de roles (M4), y sobre su resultado la de la
+        // jerarquía de objetos (M10). Al revés no valdría: un DENY heredado de un rol también anula.
+        return resolveSecurableHierarchy(
+            computeEffectivePermissions(principal, data.permissions, data.memberships),
+            knownSchemas,
+        );
+    }, [data, principal, knownSchemas]);
 
     const columns = useMemo(
         () => [
-            createTableColumn<EffectivePermission>({
+            createTableColumn<ResolvedPermission>({
                 columnId: "permission",
                 compare: (a, b) => a.permission.localeCompare(b.permission),
                 renderHeaderCell: () => Loc.permissionMatrix.columns.permission,
@@ -155,7 +187,7 @@ export const PermissionMatrixView = () => {
                     </TableCellLayout>
                 ),
             }),
-            createTableColumn<EffectivePermission>({
+            createTableColumn<ResolvedPermission>({
                 columnId: "securable",
                 compare: (a, b) => describeSecurable(a).localeCompare(describeSecurable(b)),
                 renderHeaderCell: () => Loc.permissionMatrix.columns.securable,
@@ -165,7 +197,7 @@ export const PermissionMatrixView = () => {
                     </TableCellLayout>
                 ),
             }),
-            createTableColumn<EffectivePermission>({
+            createTableColumn<ResolvedPermission>({
                 columnId: "state",
                 compare: (a, b) => a.state.localeCompare(b.state),
                 renderHeaderCell: () => Loc.permissionMatrix.columns.state,
@@ -183,10 +215,24 @@ export const PermissionMatrixView = () => {
                                 {Loc.permissionMatrix.conflict}
                             </Badge>
                         )}
+                        {/* M10: el permiso está concedido, pero un DENY de un nivel superior lo
+                            anula. El estado del catálogo se sigue mostrando tal cual, porque es lo
+                            que hay que quitar; al lado se dice lo que de verdad ocurre. */}
+                        {permission.overriddenBy && (
+                            <Badge
+                                appearance="outline"
+                                color="danger"
+                                title={Loc.permissionMatrix.overriddenTooltip(
+                                    describeOverride(permission),
+                                )}
+                                style={{ marginLeft: "6px" }}>
+                                {Loc.permissionMatrix.overridden}
+                            </Badge>
+                        )}
                     </TableCellLayout>
                 ),
             }),
-            createTableColumn<EffectivePermission>({
+            createTableColumn<ResolvedPermission>({
                 columnId: "origin",
                 compare: (a, b) => a.via.length - b.via.length,
                 renderHeaderCell: () => Loc.permissionMatrix.columns.origin,
@@ -199,7 +245,7 @@ export const PermissionMatrixView = () => {
                     </TableCellLayout>
                 ),
             }),
-            createTableColumn<EffectivePermission>({
+            createTableColumn<ResolvedPermission>({
                 columnId: "actions",
                 renderHeaderCell: () => Loc.sessions.columns.actions,
                 renderCell: (permission) => {
@@ -266,9 +312,12 @@ export const PermissionMatrixView = () => {
     );
 
     const inheritedCount = permissions.filter((permission) => permission.via.length > 0).length;
+    // Los que el catálogo da por concedidos y la jerarquía anula. Va en el recuento porque es
+    // justamente lo que antes había que deducir a mano leyendo dos filas.
+    const overriddenCount = permissions.filter((permission) => permission.overriddenBy).length;
 
     /** Estado que se pasa a la rejilla: el de la sección, con los permisos ya calculados. */
-    const gridSection: SectionState<EffectivePermission[]> = {
+    const gridSection: SectionState<ResolvedPermission[]> = {
         status: section?.status ?? "idle",
         errorMessage: section?.errorMessage,
         readAt: section?.readAt,
@@ -309,13 +358,17 @@ export const PermissionMatrixView = () => {
                 </Dropdown>
                 {principal && permissions.length > 0 && (
                     <span className={styles.label}>
-                        {Loc.permissionMatrix.counts(permissions.length, inheritedCount)}
+                        {Loc.permissionMatrix.counts(
+                            permissions.length,
+                            inheritedCount,
+                            overriddenCount,
+                        )}
                     </span>
                 )}
             </div>
 
             {principal ? (
-                <DataTable<EffectivePermission>
+                <DataTable<ResolvedPermission>
                     section={gridSection}
                     columns={columns}
                     getRowId={(permission) =>

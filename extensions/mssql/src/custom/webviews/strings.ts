@@ -62,6 +62,24 @@ export const WebviewStrings = {
             schemaLabel: "Esquema por omisión",
             schemaDefault: "dbo",
         },
+        containedUser: {
+            title: "Crear un usuario contenido",
+            nameLabel: "Nombre del usuario",
+            namePlaceholder: "ventas_app",
+            schemaLabel: "Esquema por omisión",
+            schemaDefault: "dbo",
+            /** Qué es esto, para quien no distinga los dos tipos de usuario. */
+            explanation:
+                "Un usuario contenido se autentica contra esta base de datos, no contra el servidor: no necesita un login y la base se puede mover a otra instancia con él dentro.",
+            /** Igual que en el login: donde se busca el campo de contraseña, por qué no está. */
+            passwordLater:
+                "La contraseña no se pide aquí: se pedirá al aplicar los cambios, y no se guarda en los ajustes ni aparece en el script.",
+            /** El botón de la barra de la tabla de usuarios. */
+            newButton: "Nuevo contenido",
+            /** Por qué el botón está apagado. Se dice, en lugar de esconderlo sin explicación. */
+            disabledHint:
+                "Esta base de datos no tiene la contención activada, así que no admite usuarios con contraseña propia.",
+        },
         serverRole: {
             title: "Crear un rol de servidor",
             nameLabel: "Nombre del rol",
@@ -444,9 +462,23 @@ export const WebviewStrings = {
         conflict: "En conflicto",
         conflictTooltip:
             "El mismo permiso llega concedido por un camino y denegado por otro. DENY gana.",
-        counts: (total: number, inherited: number) =>
-            `${total} permisos efectivos, ${inherited} heredados`,
-        legend: "Resuelve la herencia por pertenencia a roles, incluida la de public. No resuelve la jerarquía de objetos: un DENY sobre una columna sale como fila aparte del GRANT sobre el esquema.",
+        /** M10: el aviso de que un permiso concedido no sirve de nada porque algo de arriba lo anula. */
+        overridden: "Anulado",
+        overriddenTooltip: (source: string) =>
+            `Concedido, pero sin efecto: hay un DENY del mismo permiso sobre ${source}, que está por encima en la jerarquía.`,
+        /** Nombres de los niveles de la jerarquía, para decir qué anula qué. */
+        levels: {
+            DATABASE: "la base de datos",
+            SCHEMA: "el esquema",
+            OBJECT: "el objeto",
+            COLUMN: "la columna",
+            OTHER: "otro objeto",
+        },
+        counts: (total: number, inherited: number, overridden: number) =>
+            overridden === 0
+                ? `${total} permisos efectivos, ${inherited} heredados`
+                : `${total} permisos efectivos, ${inherited} heredados, ${overridden} anulados por la jerarquía`,
+        legend: "Resuelve las dos herencias: la de pertenencia a roles, incluida la de public, y la de la jerarquía de objetos, donde un DENY sobre la base o el esquema anula un GRANT más concreto. Un DENY sobre una tabla no anula un GRANT sobre una de sus columnas, que es la excepción que documenta Microsoft. No resuelve los permisos que cubren a otros: un CONTROL no aparece como el SELECT que implica.",
     },
 
     /** Biblioteca de snippets (M7). */

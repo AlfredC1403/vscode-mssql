@@ -130,3 +130,33 @@ export function serverPermissionState(
             "Ese permiso ya no está como se leyó: alguien lo cambió mientras el panel estaba abierto.",
     };
 }
+
+/**
+ * La base de datos tiene la contención activada (M10).
+ *
+ * Va con `buildCreateContainedUserStatement`, y es la barrera de verdad de ese generador: sin
+ * contención, un usuario con contraseña no se puede crear, y lo que llegaría al usuario sería el
+ * error del motor en lugar de una frase. Con la precondición dentro de la transacción, el lote se
+ * revierte entero y el panel dice por qué.
+ *
+ * `containment` vale 0 (ninguna), 1 (parcial) y 2 (completa). Se acepta cualquier valor distinto de
+ * 0 en lugar de exigir el 1: la contención completa no existe todavía en SQL Server, pero si
+ * apareciera, un usuario contenido seguiría siendo válido y esta comprobación no tendría por qué
+ * ser la que lo impidiera.
+ *
+ * `sys.databases` es una vista del servidor, legible desde cualquier contexto, así que esta
+ * comprobación vale igual aunque el lote se enrute a otra base.
+ *
+ * @throws Si el nombre no pasa la validación.
+ */
+export function databaseIsContained(database: string): StatementPrecondition {
+    return {
+        check: `EXISTS (SELECT 1 FROM sys.databases WHERE name = ${quoteLiteral(
+            database,
+            "base de datos",
+        )} AND containment <> 0)`,
+        errorNumber: PRECONDITION_ERRORS.stateChanged,
+        message:
+            "La base de datos no tiene la contención activada, y un usuario con contraseña propia solo existe en una base contenida.",
+    };
+}

@@ -53,7 +53,16 @@ export const UsersView = () => {
     const pending = useAdminPanelSelector((state) => state?.pendingChanges) ?? [];
     const logins = useAdminPanelSelector((state) => state?.logins?.data) ?? [];
     const schemas = useAdminPanelSelector((state) => state?.schemas?.data) ?? [];
+    const databases = useAdminPanelSelector((state) => state?.databases?.data) ?? [];
+    const selectedDatabase = useAdminPanelSelector((state) => state?.selectedDatabase) ?? "";
     const [creating, setCreating] = useState(false);
+    const [creatingContained, setCreatingContained] = useState(false);
+
+    // M10: un usuario con contraseña propia solo existe en una base contenida, así que el botón se
+    // apaga —con su motivo— en lugar de ofrecer algo que el motor va a rechazar. La barrera de
+    // verdad no es ésta: es la precondición que va dentro de la transacción (`databaseIsContained`).
+    const containedDatabase =
+        databases.find((database) => database.name === selectedDatabase)?.contained === true;
 
     const columns = useMemo(
         () => [
@@ -170,13 +179,27 @@ export const UsersView = () => {
                 emptyMessage={Loc.users.empty}
                 legend={Loc.users.legend}
                 toolbar={
-                    <Button
-                        size="small"
-                        appearance="primary"
-                        icon={<AddRegular />}
-                        onClick={() => setCreating(true)}>
-                        {Loc.create.newButton}
-                    </Button>
+                    <>
+                        <Button
+                            size="small"
+                            appearance="primary"
+                            icon={<AddRegular />}
+                            onClick={() => setCreating(true)}>
+                            {Loc.create.newButton}
+                        </Button>
+                        <Button
+                            size="small"
+                            icon={<AddRegular />}
+                            disabled={!containedDatabase}
+                            title={
+                                containedDatabase
+                                    ? Loc.create.containedUser.title
+                                    : Loc.create.containedUser.disabledHint
+                            }
+                            onClick={() => setCreatingContained(true)}>
+                            {Loc.create.containedUser.newButton}
+                        </Button>
+                    </>
                 }
                 columnSizing={{
                     name: { minWidth: 180, defaultWidth: 220 },
@@ -200,6 +223,23 @@ export const UsersView = () => {
                         kind: "createUser",
                         user: result.name,
                         login: result.related || undefined,
+                        defaultSchema: result.secondary || undefined,
+                    });
+                }}
+            />
+            <CreatePrincipalDialog
+                open={creatingContained}
+                kind="containedUser"
+                // Un usuario contenido no tiene login detrás, así que el campo relacionado no
+                // aplica y el diálogo no lo pinta para este tipo.
+                relatedOptions={[]}
+                secondaryOptions={schemas.map((schema) => schema.name)}
+                onCancel={() => setCreatingContained(false)}
+                onConfirm={(result) => {
+                    setCreatingContained(false);
+                    context?.stageChange({
+                        kind: "createContainedUser",
+                        user: result.name,
                         defaultSchema: result.secondary || undefined,
                     });
                 }}
