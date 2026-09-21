@@ -9,14 +9,14 @@ Este archivo cumple dos funciones:
 2. **Deuda de merge**: la tabla de archivos del upstream que hemos modificado. Se actualiza
    en el mismo commit del cambio, nunca después.
 
-| Dato                             | Valor                                                               |
-| -------------------------------- | ------------------------------------------------------------------- |
-| Upstream                         | `https://github.com/microsoft/vscode-mssql.git` (remoto `upstream`) |
-| Origen del fork                  | `https://github.com/AlfredC1403/vscode-mssql` (remoto `origin`)     |
-| Commit base de este inventario   | `752692d`                                                           |
-| **Último merge con el upstream** | **`f9e632ea`, traído en M9 el 2026-09-18** (§26)                    |
-| Versión de la extensión upstream | `1.46.0` (sin cambio en el merge de M9)                             |
-| Fecha del inventario             | 2026-09-17                                                          |
+| Dato                             | Valor                                                                               |
+| -------------------------------- | ----------------------------------------------------------------------------------- |
+| Upstream                         | `https://github.com/microsoft/vscode-mssql.git` (remoto `upstream`)                 |
+| Origen del fork                  | `https://github.com/AlfredC1403/vscode-mssql` (remoto `origin`)                     |
+| Commit base de este inventario   | `752692d`                                                                           |
+| **Último merge con el upstream** | **`f8c0ad9e`, traído el 2026-09-21** (§28). El anterior fue `f9e632ea`, en M9 (§26) |
+| Versión de la extensión upstream | `1.46.0` (sin cambio en los merges de M9 ni de §28)                                 |
+| Fecha del inventario             | 2026-09-17                                                                          |
 
 > **El inventario sigue anclado a `752692d`, a propósito.** Describe el terreno sobre el que se
 > construyó el fork, y reescribirlo en cada merge perdería esa foto. Lo que el merge de M9 dejó
@@ -3074,3 +3074,128 @@ su `--folder-uri` y el `import` de `pathToFileURL`—, en un archivo de arnés q
 - **No toca el camino del contenedor**, que sigue abierto y sigue escribiendo la cadena de conexión
   —con contraseña— en un temporal con permisos `0600` que borra después. Está en §26.8 como lo que
   es: un hecho conocido y aceptado, no un descuido.
+
+---
+
+## 28. Segundo merge con el upstream (2026-09-21)
+
+Merge de mantenimiento: cuatro commits del upstream, sin función nueva del fork. Se apunta aquí
+porque **rompe la premisa con la que se cerró §26.3** —que la versión del SQL Tools Service no se
+movía— y esa premisa era la que permitía no medir M3 a M6.
+
+### 28.1. Lo que se trajo
+
+| Dato                                   | Valor                                             |
+| -------------------------------------- | ------------------------------------------------- |
+| Punta anterior del upstream            | `f9e632ea` (la de M9)                             |
+| Punta traída                           | `f8c0ad9e` (2026-09-20)                           |
+| Commits del upstream                   | 4                                                 |
+| Archivos que tocó                      | 14, +10022 / −2293                                |
+| De eso, localización (`LCL`)           | 10 archivos, +9909 / −2274 — el **99 %** del diff |
+| Archivos tocados por **los dos** lados | **1**: `extensions/mssql/package.json`            |
+| **Conflictos**                         | **0**                                             |
+| Archivos de `src/custom/` tocados      | **0**                                             |
+
+Quitada la localización, el merge son **113 líneas en cuatro archivos**:
+
+| Commit    | Qué                                                                                                                                       | Archivo                                          |
+| --------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| `f8c0ad9` | SQL Tools Service `6.0.20260915.1` → `6.0.20260918.1`                                                                                     | `src/configurations/config.ts` (+1 −1)           |
+| `db533b3` | Antepone una directiva a los 13 `modelDescription`, para que un `#mssql_run_query` vaya a la herramienta y no a una skill o a la terminal | `package.json` (+13 −13) y un test nuevo (+74)   |
+| `a05e60b` | Las pastillas de la rejilla de entidades de Data API Builder ya no se solapan entre filas, y llevan tooltip                               | `SchemaDesigner/dab/dabEntityTable.tsx` (+25 −5) |
+| `86c2fae` | Traducciones (bot de localización)                                                                                                        | `localization/LCL/*`                             |
+
+Igual que en §26, **el merge es determinista y se comprobó sin tocar el repositorio**:
+
+```bash
+git merge-tree --write-tree main upstream/main   # → 15534bc2…, sin conflictos
+git rev-parse HEAD^{tree}                        # → 15534bc2…, el mismo
+```
+
+### 28.2. Por qué no hubo conflicto, medido
+
+El único archivo que escriben los dos lados es `package.json`, y las 13 líneas del upstream caen
+**todas** dentro de `contributes.languageModelTools`, mientras que lo nuestro sigue viviendo en la
+identidad, en `view/item/context`, en cuatro comandos y en tres ajustes. Cero solape, igual que en
+M9.
+
+Comprobado línea a línea, no supuesto: de las **39 líneas** que el upstream añade en los tres
+archivos de código, **0 faltan** en el árbol mezclado; y lo que nos separa del upstream en
+`package.json` siguen siendo **108 líneas, todas del fork** —la misma cifra de §26.2, que no se
+movió—. El JSON sigue siendo válido: 25 claves de primer nivel, 123 comandos, 169 ajustes.
+
+Sobreviven intactos `name: sqlworks`, `publisher: alfredc1403`, `version: 0.1.0`, los tres ajustes
+`sqlworks.*`, los cuatro comandos, la vista `sqlworksSnippets` con el `visibility: "collapsed"` que
+arregló M9 (§26.4), el `extensionPack` sin `ms-dotnettools.vscode-dotnet-runtime` y el
+`extensionId` de `constants.ts`. Los 19 archivos con marcador `// [FORK]` siguen ahí.
+
+### 28.3. El test nuevo del upstream, y por qué no nos costó nada
+
+`test/unit/languageModelToolManifest.test.ts` recorre **todas** las herramientas de
+`contributes.languageModelTools` del `package.json` y exige que cada `modelDescription` **empiece**
+por la directiva que nombra a esa herramienta. Es exactamente el tipo de test que un fork rompe sin
+enterarse: basta con añadir una herramienta propia.
+
+**No nos rompe porque el fork no añade ninguna.** Medido: las 13 herramientas del manifiesto
+mezclado son las 13 del upstream, ni una más ni una menos, y tras el merge **ninguna** queda sin la
+directiva. Queda apuntado como una **restricción nueva de la deuda de merge**: el día que el fork
+contribuya una herramienta de lenguaje propia, tendrá que abrir su `modelDescription` con esa misma
+frase o este test del upstream fallará.
+
+### 28.4. Lo único con riesgo real: la versión del SQL Tools Service
+
+§26.3 cerraba el merge anterior así: «la versión del SQL Tools Service no se movió, así que **por
+construcción** todo lo que el fork habla con el motor —M3 a M6— no puede haber cambiado de
+contrato». Era un argumento correcto entonces y **no vale aquí**, porque esta vez sí se mueve:
+`6.0.20260915.1` → `6.0.20260918.1`.
+
+No hay forma de deducirlo: hay que medirlo contra un servidor de verdad. Lo que se pudo medir
+aquí, y lo que no, está en §28.5.
+
+Un efecto secundario que conviene tener presente al empaquetar: `scripts/package-fork.js` reutiliza
+`installSqlToolsService` del upstream, que lee esta misma constante. El primer empaquetado tras este
+merge **vuelve a descargar el servicio** para cada plataforma pedida; no es un fallo, es el
+resultado de mover la versión.
+
+### 28.5. Verificación, y hasta dónde llega
+
+| Qué                                                   | Estado                                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------- |
+| Build completo del monorepo                           | ✅                                                               |
+| Typecheck de la extensión                             | ✅                                                               |
+| Typecheck de los webviews                             | ✅                                                               |
+| Lint                                                  | ✅                                                               |
+| Suite unitaria completa                               | ✅ **5557 pasan, 0 fallan**, 17 saltados (314 archivos)          |
+| De ahí, los 20 archivos de `test/unit/custom/`        | ✅ 304 tests, 0 fallan                                           |
+| Test nuevo del upstream (`languageModelToolManifest`) | ✅ 3/3                                                           |
+| e2e sin base de datos                                 | ✅ 2/2 (`activityBar` del upstream, `sqlworksSnippets` del fork) |
+| **Resto de la lista de paridad (e2e con servidor)**   | ⚠️ **no corrida**, ver abajo                                     |
+
+**Lo que esta verificación no demuestra, y conviene no dar por demostrado.** Los 304 tests de
+`test/unit/custom/` son tests de lógica sobre fixtures: calculan herencia de permisos, generan DDL y
+deciden puertas de escritura **sin hablar con ningún SQL Tools Service**. Que pasen demuestra que el
+código del fork sigue siendo coherente consigo mismo, **no** que el STS `6.0.20260918.1` conteste
+igual que el `6.0.20260915.1` — que es justo la pregunta que abrió §28.4.
+
+Quien puede contestarla es la lista de paridad del §13, y **no se pudo correr aquí**: necesita un SQL
+Server vivo con los datos sembrados que describen §18.4 y §21, y el contenedor de desarrollo remoto
+no tiene demonio de Docker (`/var/run/docker.sock` no existe) ni nada escuchando en el 1433. Los dos
+e2e que sí corrieron son los que no tocan servidor.
+
+**Queda pendiente, y es la condición para dar este merge por cerrado del todo:** correr la lista de
+paridad contra un servidor de verdad, con atención a M3–M6, que son los que hablan con el motor.
+
+### 28.6. Lo que este merge no cambia
+
+La decisión del §26.8 sigue exactamente donde estaba. El upstream **no** ha declarado
+`mssql.schemaDesigner.enableDeploymentsView` en su `package.json`, así que el camino de la CLI de
+Data API Builder sigue apagado por omisión ajena y no por decisión nuestra, y el aviso que añadió
+§27 sigue siendo toda la cobertura que hay. Las opciones (b) y (c) de §26.8 siguen sobre la mesa.
+
+### 28.7. Nota de entorno
+
+El monorepo exige **Node 24** (`scripts/workspaces.mjs`), y el contenedor de desarrollo remoto trae
+Node 22. El fallo es engañoso: `npm run build` imprime «Node.js 24+ is required» y **sale con código
+0** sin construir nada, y lo que se ve después son errores de
+`Cannot find module 'extension-toolkit/base'`, que parecen de dependencias y no lo son. No hay
+`.nvmrc` ni `engines.node` que avisen antes.
