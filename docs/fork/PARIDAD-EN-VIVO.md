@@ -18,6 +18,13 @@ Eso es lo que cierra este recorrido.
 1. **Instala el `.vsix`.** Es el de `win-x64`, con el SQL Tools Service dentro: no descarga nada al
    arrancar y no necesita el runtime de .NET en la máquina.
 
+    De dónde sale: el workflow **«Fork - .vsix de Windows»** lo construye en cada empujón a `main`
+    y en cada PR, y lo deja como artefacto del run con el nombre `sqlworks-win-x64-vsix`. Se baja
+    desde la pestaña `Actions` del repositorio, abriendo el último run y descargando ese artefacto.
+    También se puede lanzar a mano desde ahí con `Run workflow`. Construirlo en local sigue
+    valiendo, claro: `npm ci`, `npm run build -- --target mssql` y
+    `node scripts/package-fork.js --platform win-x64` desde `extensions/mssql`, con Node 24.
+
     ```powershell
     code --install-extension sqlworks-0.1.0-win-x64.vsix
     ```

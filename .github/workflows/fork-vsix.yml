@@ -1,0 +1,93 @@
+# Fork interno (SQLWorks). Archivo nuevo: no toca ningún workflow del upstream.
+#
+# Construye el `.vsix` de `win-x64` con el SQL Tools Service dentro y lo deja como artefacto
+# descargable del run. Existe porque el trabajo del upstream que empaquetaba no sirve aquí: su
+# comprobación busca `mssql-*-<plataforma>.vsix` y el manifiesto de este fork se llama `sqlworks`
+# desde M1, así que corta antes de subir nada. Arreglar aquel archivo sería deuda de merge; esto
+# es un workflow propio y no toca el suyo.
+#
+# Para qué sirve, en la práctica: el recorrido de `docs/fork/PARIDAD-EN-VIVO.md` se hace sobre un
+# `.vsix` instalado en Windows, y hasta ahora ese paquete había que construirlo a mano.
+#
+# Las seis plataformas no hacen falta: la distribución interna es a máquinas Windows (§11.4).
+# La publicación con etiqueta es otra cosa y vive en su propio workflow.
+name: Fork - .vsix de Windows
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+    paths:
+      - ".github/actions/setup-node/**"
+      - ".github/workflows/fork-vsix.yml"
+      - "extensions/mssql/**"
+      - "package.json"
+      - "package-lock.json"
+      - "packages/**"
+      - "scripts/**"
+  workflow_dispatch:
+
+# Empaquetar tarda, y el `.vsix` de un commit ya superado no lo instala nadie.
+concurrency:
+  group: fork-vsix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  vsix:
+    name: Empaquetar win-x64
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # Sin xvfb ni Playwright a propósito: aquí no se corre ningún test, solo se empaqueta.
+      - name: Construir la extensión
+        run: npm run build -- --target mssql --prod
+
+      - name: Empaquetar el .vsix
+        working-directory: extensions/mssql
+        run: node scripts/package-fork.js --platform win-x64
+
+      # El nombre sale del manifiesto, no escrito a mano: es justo lo que rompió el trabajo del
+      # upstream cuando M1 renombró la extensión, y así un renombrado futuro no vuelve a hacerlo.
+      - name: Comprobar que hay exactamente un .vsix
+        working-directory: extensions/mssql
+        run: |
+          set -euo pipefail
+
+          nombre="$(node -p "require('./package.json').name")"
+          archivos="$(find . -maxdepth 1 -name "${nombre}-*-win-x64.vsix" -print | sort)"
+          cuantos="$(printf '%s\n' "$archivos" | sed '/^$/d' | wc -l | tr -d ' ')"
+
+          if [ "$cuantos" -ne 1 ]; then
+            echo "::error::Se esperaba un .vsix de win-x64 llamado ${nombre}-*-win-x64.vsix, y hay ${cuantos}."
+            find . -maxdepth 1 -name "*.vsix" -print | sort
+            exit 1
+          fi
+
+          ls -lh $archivos
+
+      - name: Subir el .vsix
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sqlworks-win-x64-vsix
+          path: ./extensions/mssql/*-win-x64.vsix
+          # Un mes: lo que dura la ventana en la que alguien puede querer reinstalar esta versión.
+          retention-days: 30
+          if-no-files-found: error

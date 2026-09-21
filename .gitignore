@@ -63,3 +63,7 @@ localization/l10n/
 *.tsbuildinfo
 samples/connection-sharing-sample/dist
 .claude/
+# [FORK] Los ajustes del proyecto para Claude Code sí se versionan (regla de permiso acordada).
+!.claude/
+.claude/*
+!.claude/settings.json

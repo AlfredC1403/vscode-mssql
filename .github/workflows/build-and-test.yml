@@ -5,16 +5,12 @@ name: Build and Test (Unit + E2E)
 # 2. Calculate the size difference between the VSIX files of the main branch and the PR branch.
 # 3. Does a check if the PR has properly localized strings.
 
+# [FORK] Sin disparadores automáticos. Este workflow no puede pasar en el fork: su paso «Inject
+# [FORK] extension telemetry key» se planta cuando `MSSQL_APP_INSIGHTS_KEY` no está puesta, y el
+# [FORK] fork quitó la telemetría en M1, así que esa clave no existe ni debe existir. Lo sustituye
+# [FORK] `fork-build-and-test.yml`, que construye, pasa el lint y corre los unitarios. El archivo se
+# [FORK] deja entero, y no borrado, para que el merge con el upstream siga siendo limpio.
 on:
-  schedule:
-    - cron: "0 0 * * *"
-  push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-      - "release/**"
   workflow_dispatch:
 
 jobs:

@@ -1,0 +1,60 @@
+# Fork interno (SQLWorks). Archivo nuevo: no toca ningún workflow del upstream.
+#
+# Corre lo que este fork sí puede pasar: construir, el lint y la suite de unitarios completa. Existe
+# porque el `build-and-test` del upstream no llega nunca a correr nada de eso aquí: muere en su paso
+# «Inject extension telemetry key», que se planta si `MSSQL_APP_INSIGHTS_KEY` no está puesta, y no lo
+# está porque M1 quitó la telemetría a propósito (§6). Con ese paso caído se salta el empaquetado,
+# los unitarios y los smoke, así que su rojo no dice nada de la suite: la suite no se ejecutó.
+#
+# Los smoke (e2e) **no** entran, y no es un olvido: necesitan una instancia de SQL Server sembrada
+# como describe el §13.1, y el contenedor que levanta el workflow del upstream está vacío, así que
+# las especificaciones del fork fallarían por falta de datos y no por un defecto. Se siguen corriendo
+# a mano, contra un servidor de verdad, que es donde miden algo: eso es lo que recorre
+# `docs/fork/PARIDAD-EN-VIVO.md`.
+name: Fork - build, lint y unitarios
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+# La suite tarda, y el resultado de un commit ya superado no lo mira nadie.
+concurrency:
+  group: fork-build-and-test-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-lint-test:
+    name: Construir, lint y unitarios
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+
+    steps:
+      - name: Clonar
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Node.js
+        uses: ./.github/actions/setup-node
+        with:
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      # La acción del upstream deja el xvfb en :10 y construye con --prod. Los unitarios arrancan un
+      # VS Code de verdad (`@vscode/test-electron`), así que sin pantalla no llegan ni a abrir.
+      - name: Construir la extensión
+        uses: ./.github/actions/build-mssql
+
+      - name: Lint
+        run: npm run lint -- --target mssql
+
+      - name: Unitarios
+        run: DISPLAY=:10 npm test -- --target mssql
