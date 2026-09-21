@@ -1,17 +1,11 @@
 name: MSSQL VSIX Launch Verification
 
+# [FORK] Sin disparadores automáticos. Este workflow no puede pasar en el fork: su paso de
+# [FORK] verificación busca `mssql-*-<plataforma>.vsix`, y el fork empaqueta
+# [FORK] `sqlworks-0.1.0-win-x64.vsix`, así que nunca encuentra el archivo. Lo sustituye
+# [FORK] `fork-vsix.yml`, que empaqueta win-x64 y sube el .vsix como artefacto del run. El archivo se
+# [FORK] deja entero, y no borrado, para que el merge con el upstream siga siendo limpio.
 on:
-  pull_request:
-    branches:
-      - main
-      - "release/**"
-    paths:
-      - ".github/workflows/mssql-vsix-launch.yml"
-      - ".github/actions/build-mssql/**"
-      - "extensions/mssql/**"
-      - "package.json"
-      - "package-lock.json"
-      - "scripts/**"
   workflow_dispatch:
 
 jobs:
