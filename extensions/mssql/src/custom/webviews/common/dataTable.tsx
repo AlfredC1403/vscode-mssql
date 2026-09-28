@@ -3,7 +3,7 @@
  *--------------------------------------------------------------------------------------------*/
 
 import * as React from "react";
-import { useMemo, useState } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
 import {
     DataGrid,
     DataGridBody,
@@ -78,8 +78,23 @@ const useStyles = makeStyles({
         overflow: "hidden",
         backgroundColor: "var(--vscode-editorWidget-background, var(--vscode-editor-background))",
     },
+    /**
+     * El desplazamiento va en los dos ejes y con alto acotado, no solo en horizontal.
+     *
+     * Con `overflowX` solo, la rejilla crecía con todas sus filas y el que desplazaba en vertical era
+     * el cuerpo del panel: la barra horizontal quedaba al final de la última fila y, con muchas
+     * sesiones, había que bajar hasta abajo para poder moverse de lado. Acotando el alto al hueco
+     * visible (`useFitToScrollParent`), las dos barras quedan siempre a la vista.
+     */
     gridScroll: {
-        overflowX: "auto",
+        overflow: "auto",
+    },
+    /** La cabecera se queda arriba al desplazar las filas. */
+    header: {
+        position: "sticky",
+        top: 0,
+        zIndex: 1,
+        backgroundColor: "var(--vscode-editorWidget-background, var(--vscode-editor-background))",
     },
     grid: {
         minWidth: "100%",
@@ -141,6 +156,68 @@ export interface DataTableProps<T> {
     columnSizing?: TableColumnSizingOptions;
 }
 
+/** Alto mínimo de la rejilla: por debajo de esto, mejor que desplace el panel entero. */
+const MIN_GRID_HEIGHT = 200;
+
+/** El ancestro más cercano que desplaza en vertical: el cuerpo de `PanelShell`. */
+function findScrollParent(element: HTMLElement): HTMLElement | undefined {
+    let current = element.parentElement;
+    while (current) {
+        const overflowY = getComputedStyle(current).overflowY;
+        if (overflowY === "auto" || overflowY === "scroll") {
+            return current;
+        }
+        current = current.parentElement;
+    }
+    return undefined;
+}
+
+/**
+ * Acota el alto del elemento a lo que queda visible de su contenedor con scroll, desde donde
+ * empieza el elemento hasta el borde inferior del contenedor (menos su relleno).
+ *
+ * La posición se mide **sumando el `scrollTop`**, así que el resultado no cambia si el panel está
+ * desplazado. Se recalcula cuando cambia el tamaño del contenedor (el cajón de cambios pendientes
+ * aparece y le quita alto, o las pestañas pasan a dos líneas) o el del bloque de la tabla (un aviso
+ * encima de la rejilla).
+ */
+function useFitToScrollParent(
+    target: React.RefObject<HTMLDivElement | null>,
+    observed: React.RefObject<HTMLDivElement | null>,
+    active: boolean,
+): number | undefined {
+    const [maxHeight, setMaxHeight] = useState<number | undefined>(undefined);
+
+    useLayoutEffect(() => {
+        const element = target.current;
+        if (!active || !element) {
+            return undefined;
+        }
+        const parent = findScrollParent(element);
+        if (!parent) {
+            return undefined;
+        }
+
+        const measure = () => {
+            const parentRect = parent.getBoundingClientRect();
+            const top = element.getBoundingClientRect().top - parentRect.top + parent.scrollTop;
+            const paddingBottom = parseFloat(getComputedStyle(parent).paddingBottom) || 0;
+            const available = Math.floor(parent.clientHeight - top - paddingBottom);
+            setMaxHeight(Math.max(MIN_GRID_HEIGHT, available));
+        };
+
+        measure();
+        const observer = new ResizeObserver(measure);
+        observer.observe(parent);
+        if (observed.current) {
+            observer.observe(observed.current);
+        }
+        return () => observer.disconnect();
+    }, [target, observed, active]);
+
+    return maxHeight;
+}
+
 /** Normaliza para buscar: minúsculas y sin diacríticos, así «Administración» encuentra «administracion». */
 function normalize(value: string): string {
     return value.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
@@ -160,6 +237,8 @@ export function DataTable<T>({
 }: DataTableProps<T>) {
     const styles = useStyles();
     const [query, setQuery] = useState("");
+    const rootRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
 
     const items = section.data ?? [];
     const filtered = useMemo(() => {
@@ -169,6 +248,10 @@ export function DataTable<T>({
         const needle = normalize(query.trim());
         return items.filter((item) => normalize(getSearchText(item)).includes(needle));
     }, [items, query, getSearchText]);
+
+    // Los hooks van antes de los `return` tempranos: la rejilla solo existe con datos y filas.
+    const hasGrid = section.status === "loaded" && filtered.length > 0;
+    const gridMaxHeight = useFitToScrollParent(scrollRef, rootRef, hasGrid);
 
     if (section.status === "loading" || section.status === "idle") {
         return (
@@ -188,7 +271,7 @@ export function DataTable<T>({
     }
 
     return (
-        <div className={styles.root}>
+        <div className={styles.root} ref={rootRef}>
             {notice}
             <div className={styles.filterBar}>
                 {getSearchText && (
@@ -219,7 +302,12 @@ export function DataTable<T>({
                 </div>
             ) : (
                 <div className={styles.gridCard}>
-                    <div className={styles.gridScroll}>
+                    <div
+                        className={styles.gridScroll}
+                        ref={scrollRef}
+                        style={
+                            gridMaxHeight !== undefined ? { maxHeight: gridMaxHeight } : undefined
+                        }>
                         <DataGrid
                             className={styles.grid}
                             items={filtered}
@@ -229,7 +317,7 @@ export function DataTable<T>({
                             resizableColumns
                             columnSizingOptions={columnSizing}
                             size="small">
-                            <DataGridHeader>
+                            <DataGridHeader className={styles.header}>
                                 <DataGridRow>
                                     {({ renderHeaderCell }) => (
                                         <DataGridHeaderCell className={styles.headerCell}>

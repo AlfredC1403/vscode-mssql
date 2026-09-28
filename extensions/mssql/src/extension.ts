@@ -20,6 +20,8 @@ import {
 import { disableTelemetry } from "./custom/overrides/telemetry";
 // [FORK] Registro único de todo lo que añade el fork. Ver src/custom/index.ts
 import { registerCustom } from "./custom";
+// [FORK] Aviso si la extensión MSSQL de Microsoft está instalada. Ver src/custom/overrides/conflictWatch.ts
+import { warnAboutConflictingExtensions } from "./custom/overrides/conflictWatch";
 import MainController from "./controllers/mainController";
 import { IExtension } from "vscode-mssql";
 import SqlToolsServerClient from "./languageservice/serviceclient";
@@ -119,6 +121,8 @@ class MssqlActivation {
         const context = this._contextService.context;
         // [FORK] Sustituye a initializeTelemetryReporter(context.extension.packageJSON.aiKey)
         disableTelemetry();
+        // [FORK] Antes que nada del upstream: si choca con la de Microsoft, lo de abajo puede fallar.
+        warnAboutConflictingExtensions();
 
         // Create the coordinator early so uriOwnershipApi is available for export.
         uriOwnershipCoordinator = createUriOwnershipCoordinator(context);

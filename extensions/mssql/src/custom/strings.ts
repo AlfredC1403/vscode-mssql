@@ -270,4 +270,14 @@ export const Strings = {
         settingEnabled: (label: string, key: string, scope: string) =>
             `SQLWorks: ${label} está activado en los ajustes de ${scope} (\`${key}\`). Esa función descarga y ejecuta un binario desde un feed externo, que no es lo que este fork hace por omisión. Ver FORK.md §26.8.`,
     },
+    conflictWatch: {
+        /**
+         * La extensión MSSQL de Microsoft está instalada junto a SQLWorks. Dice qué se rompe, en
+         * términos que la persona ve, y qué hacer. Ver `overrides/conflictWatch.ts`.
+         */
+        microsoftMssqlInstalled:
+            "SQLWorks no puede convivir con la extensión SQL Server (mssql) de Microsoft: comparten los mismos comandos, así que se duplican los botones y deja de ejecutar las consultas. Desinstala la de Microsoft (y SQL Database Projects, Data Workspace, SQL Bindings y Database Management Keymap, que dependen de ella) y recarga la ventana.",
+        /** Botón que abre el panel de extensiones con la búsqueda ya hecha. */
+        showExtensions: "Ver extensiones",
+    },
 } as const;

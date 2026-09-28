@@ -45,11 +45,6 @@
     "extensionDependencies": [
         "vscode.sql"
     ],
-    "extensionPack": [
-        "ms-mssql.data-workspace-vscode",
-        "ms-mssql.sql-database-projects-vscode",
-        "ms-mssql.sql-bindings-vscode"
-    ],
     "scripts": {
         "build:runtime-localization": "node ../../scripts/localization-generate.js vscode-mssql .",
         "build:copy-assets": "node scripts/copy-assets.js",
@@ -1880,6 +1875,18 @@
             }
         ],
         "keybindings": [
+            {
+                "command": "mssql.runQuery",
+                "key": "f5",
+                "mac": "f5",
+                "when": "editorTextFocus && editorLangId == 'sql' && !notebookEditorFocused"
+            },
+            {
+                "command": "mssql.runCurrentStatement",
+                "key": "ctrl+f5",
+                "mac": "cmd+f5",
+                "when": "editorTextFocus && editorLangId == 'sql' && !notebookEditorFocused"
+            },
             {
                 "command": "mssql.runQuery",
                 "key": "ctrl+shift+e",

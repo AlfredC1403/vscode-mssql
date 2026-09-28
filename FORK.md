@@ -62,6 +62,8 @@ git grep -n "\[FORK\]"
 | `.github/workflows/build-and-test.yml` | **CI**: el bloque `on:` pasa a `workflow_dispatch:` solo, con el porqué en comentarios `# [FORK]` encima | El paso «Inject extension telemetry key» se planta si `MSSQL_APP_INSIGHTS_KEY` no está puesta, y M1 quitó la telemetría, así que esa clave no existe ni debe existir. Se queda rojo en todo PR haga lo que haga el diff. Lo sustituye `fork-build-and-test.yml`. El archivo se deja entero, no borrado, para que el merge con el upstream siga siendo limpio | CI |
 | `.github/workflows/mssql-vsix-launch.yml` | **CI**: ídem, `on:` pasa a `workflow_dispatch:` solo | Su paso de verificación busca `mssql-*-<plataforma>.vsix` y el fork empaqueta `sqlworks-0.1.0-win-x64.vsix`, así que nunca encuentra el archivo. Lo sustituye `fork-vsix.yml`. Mismo criterio: archivo entero, no borrado | CI |
 | `.gitignore` | **CI, 3 líneas**: excepción para versionar `.claude/settings.json` | El ajuste de permisos de Claude Code queda escrito en el repositorio y no en una configuración local que no se ve en el código. El resto de `.claude/` sigue ignorado | CI |
+| `extensions/mssql/package.json` | **§29**: `extensionPack` **eliminado** entero, y dos atajos nuevos en `keybindings`: F5 → `mssql.runQuery` y Ctrl+F5 → `mssql.runCurrentStatement` | El `extensionPack` arrastraba la extensión MSSQL de Microsoft, que choca con la nuestra. F5 lo daba el Keymap de Microsoft, que depende de ella; sin él, F5 abría el diálogo de depuración (§29) | §29 |
+| `extensions/mssql/src/extension.ts` | **§29, 2 líneas más**: el `import` de `warnAboutConflictingExtensions` y su llamada justo tras `disableTelemetry()` | Tiene que ir antes que nada del upstream: si la de Microsoft activó primero, lo de abajo revienta al registrar comandos y nunca se llega a `registerCustom`. Lógica en `src/custom/overrides/conflictWatch.ts` | §29 |
 
 **Sobre el marcador `// [FORK]` en `package.json`:** JSON no admite comentarios, así que ahí no se
 puede poner. El registro son esta tabla y el prefijo `sqlworks.` de todo lo que añade el fork, que
@@ -3202,3 +3204,56 @@ Node 22. El fallo es engañoso: `npm run build` imprime «Node.js 24+ is require
 0** sin construir nada, y lo que se ve después son errores de
 `Cannot find module 'extension-toolkit/base'`, que parecen de dependencias y no lo son. No hay
 `.nvmrc` ni `engines.node` que avisen antes.
+
+## 29. Convivencia con MSSQL de Microsoft, F5 y scroll de las rejillas (2026-09-28)
+
+Tres fallos de interfaz que reportó Moises con capturas. Dos tienen la misma causa.
+
+### 29.1. Botones duplicados, la «M» y no poder ejecutar
+
+**Causa:** el `extensionPack` de `package.json` declaraba `ms-mssql.data-workspace-vscode`,
+`ms-mssql.sql-database-projects-vscode` y `ms-mssql.sql-bindings-vscode`, y las dos primeras llevan
+`ms-mssql.mssql` en su `extensionDependencies`. Instalar SQLWorks instalaba también la extensión
+MSSQL de Microsoft. Con las dos activas:
+
+- Comparten los identificadores de comando (`mssql.*`), así que la que activa segunda falla al
+  registrarlos y se queda a medias.
+- Las dos contribuyen `editor/title` para `editorLangId == sql`: botones duplicados.
+- Las dos declaran `vscode-sql-common-features.uriOwnershipApi`, así que cada una ve a la otra como
+  coordinadora y le cede los `.sql` (`mssql.hideUIElements`). Se oculta `mssql.runQuery` y salen
+  `runQueryWithUriOwnership` y `connectWithUriOwnership`, cuyos iconos
+  (`media/*UriOwnership_*.svg`) llevan la insignia «M». Los iconos resuelven bien: es su dibujo.
+
+**Arreglo:** se quita el `extensionPack` entero y se añade `src/custom/overrides/conflictWatch.ts`,
+que avisa al activar si `ms-mssql.mssql` está instalada y abre el panel de extensiones filtrado.
+Quitar el paquete no desinstala lo que ya se instaló: la persona tiene que desinstalarlo a mano, y
+el aviso se lo dice.
+
+**Lo que se pierde:** los proyectos de base de datos. El upstream solo los enciende si el
+«shell» de marketplace `ms-mssql.sql-database-projects-vscode` está instalado
+(`extension.ts`, `mssqlRuntime === true`), y ese shell exige la extensión de Microsoft. No hay forma
+de tener proyectos de base de datos sin el choque, así que se renuncia a ellos.
+
+### 29.2. F5 abría «You don't have an extension for debugging SQL»
+
+El upstream solo asocia Ctrl+Shift+E a ejecutar. F5 y Ctrl+F5 los aportaba
+`ms-mssql.mssql-database-management-keymap`, que depende de la extensión de Microsoft. Sin él, F5 cae
+en el `workbench.action.debug.start` de VS Code. Se copian a nuestro `package.json` los dos atajos
+del keymap con su misma cláusula `when`: F5 ejecuta y Ctrl+F5 ejecuta la sentencia actual.
+
+### 29.3. La barra horizontal de las rejillas solo se veía al final
+
+`common/dataTable.tsx` desplazaba solo en horizontal y dejaba crecer la rejilla con todas sus filas;
+el vertical lo hacía el cuerpo de `PanelShell`. Con muchas filas (sesiones), la barra horizontal
+quedaba debajo de la última. Ahora el contenedor desplaza en los dos ejes y su alto se acota al hueco
+visible del cuerpo (`useFitToScrollParent`, recalculado con `ResizeObserver`), con 200 px de mínimo.
+La cabecera queda fija arriba. Lo cubren las ocho vistas que usan `DataTable`.
+
+La rejilla de resultados de consulta es la `SlickGrid` del upstream, con su propio scroll, y no se
+toca.
+
+### 29.4. Verificación
+
+El contenedor no puede instalar el workspace (§28.7 y memoria del proyecto), así que la compilación,
+el lint y los unitarios (incluido `test/unit/custom/conflictWatch.test.ts`) los corre la CI propia.
+El comportamiento visual se comprueba a mano con el `.vsix` del artefacto `sqlworks-win-x64-vsix`.
